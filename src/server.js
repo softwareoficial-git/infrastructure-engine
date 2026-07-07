@@ -146,7 +146,7 @@ async function startServer() {
       console.log(`📡 Developer Endpoint: POST /execute`);
     });
   } catch (error) {
-    console.error('❌ Critical Engine Failure:', error.message);
+    console.error('❌ Critical Engine Failure:', error);
     process.exit(1);
   }
 }
