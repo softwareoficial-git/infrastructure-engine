@@ -24,11 +24,16 @@ class Motor {
     }
 
     const commands = DomainClass.commands;
+    const docs = DomainClass.docs || {};
+
     for (const [action, handler] of Object.entries(commands)) {
-      // Store both the handler and the optional schema
+      const actionDocs = docs[action] || {};
+      // Store handler, schema, and comprehensive documentation
       this.commands[domainName][action] = {
         handler: handler.bind(instance),
         schema: DomainClass.schemas ? DomainClass.schemas[action] : null,
+        description: actionDocs.description || 'No description provided.',
+        possibleErrors: actionDocs.errors || [],
       };
     }
     console.log(`Dominio ${domainName} registrado con ${Object.keys(commands).length} comandos.`);
@@ -70,7 +75,14 @@ class Motor {
   listCommands() {
     const catalog = {};
     for (const [domain, actions] of Object.entries(this.commands)) {
-      catalog[domain] = Object.keys(actions);
+      catalog[domain] = {};
+      for (const [action, config] of Object.entries(actions)) {
+        catalog[domain][action] = {
+          description: config.description,
+          payload: config.schema,
+          possibleErrors: config.possibleErrors,
+        };
+      }
     }
     return catalog;
   }

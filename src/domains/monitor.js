@@ -7,32 +7,60 @@ class MonitorDomain {
   static schemas = {
     'get-global-stats': {
       type: 'object',
+      description: 'Obtains general metrics of the entire system.',
       properties: {},
       additionalProperties: false,
     },
     'get-global-versions': {
       type: 'object',
+      description: 'Shows the distribution of schema versions across all clients.',
       properties: {},
       additionalProperties: false,
     },
     'get-my-version': {
       type: 'object',
+      description: 'Returns the current schema version of a specific client.',
       properties: {
-        clienteId: { type: 'integer' },
+        clienteId: { type: 'integer', description: 'The unique ID of the client.' },
       },
       required: ['clienteId'],
     },
     'get-system-health': {
       type: 'object',
+      description: 'Performs a basic health check of the core services.',
       properties: {},
       additionalProperties: false,
     },
     'get-client-report': {
       type: 'object',
+      description: 'Generates a comprehensive report of a client including inventory and users.',
       properties: {
-        clienteId: { type: 'integer' },
+        clienteId: { type: 'integer', description: 'The unique ID of the client.' },
       },
       required: ['clienteId'],
+    },
+  };
+
+  static docs = {
+    'get-global-stats': {
+      description: 'Returns total count of clients, templates, and users in the system.',
+      errors: ['FORBIDDEN'],
+    },
+    'get-global-versions': {
+      description: 'Returns a map of version -> client_count.',
+      errors: ['FORBIDDEN'],
+    },
+    'get-my-version': {
+      description: 'Check if a client is up to date with the latest schema.',
+      errors: ['CLIENT_NOT_FOUND', 'FORBIDDEN'],
+    },
+    'get-system-health': {
+      description: 'Quick check for DB and Engine connectivity.',
+      errors: ['SYSTEM_UNHEALTHY'],
+    },
+    'get-client-report': {
+      description: 'Detailed analysis of a client: total inventory value, active users, etc.',
+      errors: ['FORBIDDEN', 'CLIENT_NOT_FOUND'],
     },
   };
 

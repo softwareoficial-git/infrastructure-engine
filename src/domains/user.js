@@ -7,18 +7,32 @@ class UserDomain {
   static schemas = {
     read: {
       type: 'object',
+      description: 'Reads the public configuration of a specific client.',
       properties: {
-        clienteId: { type: 'integer' },
+        clienteId: { type: 'integer', description: 'The unique ID of the client to read.' },
       },
       required: ['clienteId'],
     },
     write: {
       type: 'object',
+      description: "Updates or adds new data to a client's public configuration.",
       properties: {
-        clienteId: { type: 'integer' },
-        data: { type: 'object' },
+        clienteId: { type: 'integer', description: 'The unique ID of the client to update.' },
+        data: { type: 'object', description: 'The JSON object containing the data to merge.' },
       },
       required: ['clienteId', 'data'],
+    },
+  };
+
+  static docs = {
+    read: {
+      description: 'Fetch the full public config (stock, prices, etc.) for a client.',
+      errors: ['CLIENT_NOT_FOUND', 'FORBIDDEN'],
+    },
+    write: {
+      description:
+        "Update a client's config. Uses a JSON merge, so it only updates provided fields.",
+      errors: ['FORBIDDEN'],
     },
   };
 
