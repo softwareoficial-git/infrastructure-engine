@@ -1,0 +1,9 @@
+Dominio SYSTEM registrado con 1 comandos.
+Dominio SYSTEM registrado con 2 comandos.
+Dominio APP registrado con 5 comandos.
+Dominio CLIENT registrado con 2 comandos.
+Dominio USER registrado con 2 comandos.
+Dominio MONITOR registrado con 5 comandos.
+✅ Infrastructure Engine: Database connected.
+🚀 Stable Bridge running on http://localhost:3001
+📡 Developer Endpoint: POST /execute
