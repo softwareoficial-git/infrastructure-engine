@@ -39,7 +39,7 @@ class Motor {
     console.log(`Dominio ${domainName} registrado con ${Object.keys(commands).length} comandos.`);
   }
 
-  async execute(user, commandStr, payload) {
+  async execute(user, commandStr, payload, txClient = null) {
     const [rawDomain, action] = commandStr.split(':');
     const domain = rawDomain.toUpperCase();
 
@@ -69,7 +69,7 @@ class Motor {
       }
     }
 
-    return await cmdConfig.handler(user, payload);
+    return await cmdConfig.handler(user, payload, txClient);
   }
 
   listCommands() {

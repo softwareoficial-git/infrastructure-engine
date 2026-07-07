@@ -64,7 +64,8 @@ class ClientDomain {
       errors: ['USER_NOT_FOUND'],
     },
     'user-list': {
-      description: 'Lists users of a client with optional role filtering.',
+      description:
+        'Lists users of a client with optional role filtering. Supports limit and offset for pagination.',
       errors: [],
     },
     'schema-extend': {
@@ -74,11 +75,11 @@ class ClientDomain {
   };
 
   static commands = {
-    'user-create': async function (user, payload) {
+    'user-create': async function (user, payload, txClient = null) {
       const { username, password, role_id, clienteId } = payload;
       if (!username || !password || !clienteId) throw new Error('Faltan datos requeridos');
 
-      const result = await db.query(
+      const result = await (txClient || db).query(
         'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [username, password, role_id, `TOKEN_${Math.random().toString(36).substr(2, 9)}`, clienteId]
       );
@@ -86,9 +87,9 @@ class ClientDomain {
       return { status: 'success', usuario: result.rows[0] };
     },
 
-    'user-read': async function (user, payload) {
+    'user-read': async function (user, payload, txClient = null) {
       const { clienteId, userId } = payload;
-      const result = await db.query(
+      const result = await (txClient || db).query(
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1 AND (u.id::text = $2 OR u.username = $2)',
         [clienteId, userId]
       );
@@ -97,7 +98,7 @@ class ClientDomain {
       return { status: 'success', usuario: result.rows[0] };
     },
 
-    'user-update': async function (user, payload) {
+    'user-update': async function (user, payload, txClient = null) {
       const { clienteId, userId, data } = payload;
       const keys = Object.keys(data);
       if (keys.length === 0) throw new Error('No hay datos para actualizar');
@@ -105,7 +106,7 @@ class ClientDomain {
       const setClause = keys.map((key, i) => `${key} = $${i + 3}`).join(', ');
       const values = [...Object.values(data), clienteId, userId];
 
-      const result = await db.query(
+      const result = await (txClient || db).query(
         `UPDATE usuarios SET ${setClause} WHERE cliente_id = $${values.length} AND (id::text = $${values.length + 1} OR username = $${values.length + 1}) RETURNING *`,
         [...Object.values(data), clienteId, userId]
       );
@@ -114,8 +115,8 @@ class ClientDomain {
       return { status: 'success', usuario: result.rows[0] };
     },
 
-    'user-list': async function (user, payload) {
-      const { clienteId, filter } = payload;
+    'user-list': async function (user, payload, txClient = null) {
+      const { clienteId, filter, limit, offset } = payload;
       let query =
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1';
       const params = [clienteId];
@@ -125,15 +126,25 @@ class ClientDomain {
         params.push(filter.role_name);
       }
 
-      const result = await db.query(query, params);
+      if (limit !== undefined) {
+        query += ` LIMIT $${params.length + 1}`;
+        params.push(limit);
+      }
+
+      if (offset !== undefined) {
+        query += ` OFFSET $${params.length + 1}`;
+        params.push(offset);
+      }
+
+      const result = await (txClient || db).query(query, params);
       return { status: 'success', usuarios: result.rows };
     },
 
-    'schema-extend': async function (user, payload) {
+    'schema-extend': async function (user, payload, txClient = null) {
       const { clienteId, newFields } = payload;
       if (!clienteId || !newFields) throw new Error('clienteId y newFields son requeridos');
 
-      const result = await db.query(
+      const result = await (txClient || db).query(
         'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
         [clienteId, JSON.stringify(newFields)]
       );

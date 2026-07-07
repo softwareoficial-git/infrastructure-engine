@@ -26,6 +26,11 @@ const ERROR_CATALOG = {
     solution:
       'Review the required fields and data types for this command. Check the "details" field in the response.',
   },
+  BATCH_ERROR: {
+    message:
+      'One or more commands in the batch failed, and the entire transaction was rolled back.',
+    solution: 'Check the "details" field to identify which specific command caused the failure.',
+  },
   CLIENT_NOT_FOUND: {
     message: 'The specified client does not exist.',
     solution: 'Verify that the "clienteId" provided is correct and exists in the database.',

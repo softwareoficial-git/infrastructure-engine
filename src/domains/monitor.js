@@ -65,11 +65,13 @@ class MonitorDomain {
   };
 
   static commands = {
-    'get-global-stats': async function (user, payload) {
+    'get-global-stats': async function (user, payload, txClient = null) {
       // Admin level only (handled by motor.authorize)
-      const clientsCount = await db.query('SELECT count(*) as total FROM clientes');
-      const templatesCount = await db.query('SELECT count(*) as total FROM plantillas');
-      const usersCount = await db.query('SELECT count(*) as total FROM usuarios');
+      const clientsCount = await (txClient || db).query('SELECT count(*) as total FROM clientes');
+      const templatesCount = await (txClient || db).query(
+        'SELECT count(*) as total FROM plantillas'
+      );
+      const usersCount = await (txClient || db).query('SELECT count(*) as total FROM usuarios');
 
       return {
         status: 'success',
@@ -82,9 +84,9 @@ class MonitorDomain {
       };
     },
 
-    'get-global-versions': async function (user, payload) {
+    'get-global-versions': async function (user, payload, txClient = null) {
       // Admin level: See distribution of schema versions across all clients
-      const result = await db.query(
+      const result = await (txClient || db).query(
         'SELECT schema_version, count(*) as count FROM clientes GROUP BY schema_version'
       );
 
@@ -99,7 +101,7 @@ class MonitorDomain {
       };
     },
 
-    'get-client-report': async function (user, payload) {
+    'get-client-report': async function (user, payload, txClient = null) {
       const { clienteId } = payload;
 
       // Security check: Only SUPER_ADMIN or the client's own admin/user can see this
@@ -108,12 +110,14 @@ class MonitorDomain {
       }
 
       // 1. Basic Info
-      const clientRes = await db.query('SELECT * FROM clientes WHERE id = $1', [clienteId]);
+      const clientRes = await (txClient || db).query('SELECT * FROM clientes WHERE id = $1', [
+        clienteId,
+      ]);
       if (clientRes.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
       const client = clientRes.rows[0];
 
       // 2. User Count
-      const userCountRes = await db.query(
+      const userCountRes = await (txClient || db).query(
         'SELECT count(*) as total FROM usuarios WHERE cliente_id = $1',
         [clienteId]
       );
@@ -153,12 +157,13 @@ class MonitorDomain {
       };
     },
 
-    'get-my-version': async function (user, payload) {
+    'get-my-version': async function (user, payload, txClient = null) {
       // Client level: See their own current version
       const { clienteId } = payload;
-      const result = await db.query('SELECT schema_version FROM clientes WHERE id = $1', [
-        clienteId,
-      ]);
+      const result = await (txClient || db).query(
+        'SELECT schema_version FROM clientes WHERE id = $1',
+        [clienteId]
+      );
 
       if (result.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
 
@@ -168,10 +173,10 @@ class MonitorDomain {
       };
     },
 
-    'get-system-health': async function (user, payload) {
+    'get-system-health': async function (user, payload, txClient = null) {
       // Basic health check for the engine
       try {
-        await db.query('SELECT 1');
+        await (txClient || db).query('SELECT 1');
         return {
           status: 'success',
           health: 'healthy',

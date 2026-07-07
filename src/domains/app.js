@@ -91,10 +91,10 @@ class AppDomain {
   };
 
   static commands = {
-    'template-create': async function (user, payload) {
+    'template-create': async function (user, payload, txClient = null) {
       const { nombre, contenido } = payload;
 
-      const result = await db.query(
+      const result = await (txClient || db).query(
         'INSERT INTO plantillas (nombre, contenido) VALUES ($1, $2) RETURNING *',
         [nombre, contenido]
       );
@@ -102,11 +102,11 @@ class AppDomain {
       return { status: 'success', template: result.rows[0] };
     },
 
-    'template-publish': async function (user, payload) {
+    'template-publish': async function (user, payload, txClient = null) {
       const { templateId } = payload;
 
-      await db.query('UPDATE plantillas SET es_oficial = false');
-      const result = await db.query(
+      await (txClient || db).query('UPDATE plantillas SET es_oficial = false');
+      const result = await (txClient || db).query(
         'UPDATE plantillas SET es_oficial = true WHERE id = $1 RETURNING *',
         [templateId]
       );
@@ -115,17 +115,17 @@ class AppDomain {
       return { status: 'success', message: 'Plantilla publicada', template: result.rows[0] };
     },
 
-    'client-create': async function (user, payload) {
+    'client-create': async function (user, payload, txClient = null) {
       const { nombre } = payload;
 
-      const templateRes = await db.query(
+      const templateRes = await (txClient || db).query(
         'SELECT contenido FROM plantillas WHERE es_oficial = true LIMIT 1'
       );
       if (templateRes.rows.length === 0) throw new Error('No hay una plantilla oficial');
 
       const officialContent = templateRes.rows[0].contenido;
 
-      const clientRes = await db.query(
+      const clientRes = await (txClient || db).query(
         'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
         [nombre, officialContent, JSON.stringify({ plan: 'free' })]
       );
@@ -133,10 +133,10 @@ class AppDomain {
       return { status: 'success', cliente: clientRes.rows[0] };
     },
 
-    'update-client-plan': async function (user, payload) {
+    'update-client-plan': async function (user, payload, txClient = null) {
       const { clienteId, plan } = payload;
 
-      const result = await db.query(
+      const result = await (txClient || db).query(
         "UPDATE clientes SET private_config = private_config || jsonb_build_object('plan', $2::text) WHERE id = $1 RETURNING private_config",
         [clienteId, plan]
       );
@@ -149,10 +149,10 @@ class AppDomain {
       };
     },
 
-    'migrate-global': async function (user, payload) {
+    'migrate-global': async function (user, payload, txClient = null) {
       const { targetVersion, transformation } = payload;
 
-      const clients = await db.query('SELECT id, public_config FROM clientes');
+      const clients = await (txClient || db).query('SELECT id, public_config FROM clientes');
 
       for (const client of clients.rows) {
         let currentConfig = client.public_config;
@@ -161,7 +161,7 @@ class AppDomain {
           currentConfig[transformation.add_field] = transformation.default;
         }
 
-        await db.query(
+        await (txClient || db).query(
           'UPDATE clientes SET public_config = $1, schema_version = $2 WHERE id = $3',
           [currentConfig, targetVersion, client.id]
         );
@@ -173,13 +173,16 @@ class AppDomain {
       };
     },
 
-    'client-delete': async function (user, payload) {
+    'client-delete': async function (user, payload, txClient = null) {
       const { clienteId } = payload;
 
       // Delete associated users first to avoid FK violation
-      await db.query('DELETE FROM usuarios WHERE cliente_id = $1', [clienteId]);
+      await (txClient || db).query('DELETE FROM usuarios WHERE cliente_id = $1', [clienteId]);
 
-      const result = await db.query('DELETE FROM clientes WHERE id = $1 RETURNING id', [clienteId]);
+      const result = await (txClient || db).query(
+        'DELETE FROM clientes WHERE id = $1 RETURNING id',
+        [clienteId]
+      );
       if (result.rows.length === 0) throw new Error('Cliente no encontrado');
       return { status: 'success', message: 'Cliente eliminado' };
     },

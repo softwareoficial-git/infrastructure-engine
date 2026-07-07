@@ -12,6 +12,10 @@ class Database {
     return this.pool.query(text, params);
   }
 
+  async getClient() {
+    return await this.pool.connect();
+  }
+
   async close() {
     await this.pool.end();
   }
