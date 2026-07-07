@@ -104,6 +104,22 @@ class SystemDomain {
         adminToken: adminToken,
       };
     },
+
+    'list-commands': async function (user, payload) {
+      return {
+        status: 'success',
+        commands: motor.listCommands(),
+      };
+    },
+
+    help: async function (user, payload) {
+      return {
+        status: 'success',
+        message: 'Welcome to the Infrastructure Engine Help!',
+        instructions:
+          'Use the format DOMAIN:action. For a full list of commands, use SYSTEM:list-commands.',
+      };
+    },
   };
 }
 

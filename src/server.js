@@ -147,8 +147,10 @@ app.post('/execute', authenticate, async (req, res) => {
   }
 });
 
-// Root route - Developer Documentation
+// Root route - Dynamic Developer Documentation
 app.get('/', (req, res) => {
+  const commands = motor.listCommands();
+
   res.json({
     message: 'Welcome to the Infrastructure Engine API',
     documentation: {
@@ -159,13 +161,7 @@ app.get('/', (req, res) => {
         command: 'Command in format DOMAIN:action (required)',
         payload: 'Optional parameters object',
       },
-      available_domains: [
-        { domain: 'SYSTEM', description: 'Core system and setup' },
-        { domain: 'APP', description: 'Global application and template management' },
-        { domain: 'CLIENT', description: 'Client-specific operations' },
-        { domain: 'USER', description: 'User and data access' },
-        { domain: 'MONITOR', description: 'System health and analytics' },
-      ],
+      available_commands: commands,
       example_request: {
         token: 'YOUR_TOKEN',
         command: 'MONITOR:get-system-health',

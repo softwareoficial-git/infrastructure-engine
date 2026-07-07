@@ -39,7 +39,16 @@ class Motor {
     const domain = rawDomain.toUpperCase();
 
     if (!this.commands[domain] || !this.commands[domain][action]) {
-      throw new EngineError('CMD_NOT_FOUND');
+      const availableDomains = Object.keys(this.commands);
+      const domainCommands = this.commands[domain] ? Object.keys(this.commands[domain]) : [];
+
+      throw new EngineError('CMD_NOT_FOUND', {
+        message: `Command '${commandStr}' not found.`,
+        solution:
+          domainCommands.length > 0
+            ? `Available commands in ${domain}: ${domainCommands.join(', ')}`
+            : `Available domains: ${availableDomains.join(', ')}`,
+      });
     }
 
     const cmdConfig = this.commands[domain][action];
@@ -56,6 +65,14 @@ class Motor {
     }
 
     return await cmdConfig.handler(user, payload);
+  }
+
+  listCommands() {
+    const catalog = {};
+    for (const [domain, actions] of Object.entries(this.commands)) {
+      catalog[domain] = Object.keys(actions);
+    }
+    return catalog;
   }
 
   async authUser(token) {
