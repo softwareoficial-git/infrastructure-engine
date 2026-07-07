@@ -77,7 +77,7 @@ class ClientDomain {
   static commands = {
     'user-create': async function (user, payload, txClient = null) {
       const { username, password, role_id, clienteId } = payload;
-      if (!username || !password || !clienteId) throw new Error('Faltan datos requeridos');
+      if (!username || !password || !clienteId) throw new EngineError('INVALID_PAYLOAD');
 
       const result = await (txClient || db).query(
         'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
@@ -94,24 +94,31 @@ class ClientDomain {
         [clienteId, userId]
       );
 
-      if (result.rows.length === 0) throw new Error('USER_NOT_FOUND: Usuario no encontrado');
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
       return { status: 'success', usuario: result.rows[0] };
     },
 
     'user-update': async function (user, payload, txClient = null) {
       const { clienteId, userId, data } = payload;
-      const keys = Object.keys(data);
-      if (keys.length === 0) throw new Error('No hay datos para actualizar');
 
-      const setClause = keys.map((key, i) => `${key} = $${i + 3}`).join(', ');
-      const values = [...Object.values(data), clienteId, userId];
+      const ALLOWED_FIELDS = ['password', 'role_id', 'username'];
+      const keys = Object.keys(data).filter((key) => ALLOWED_FIELDS.includes(key));
+
+      if (keys.length === 0) throw new EngineError('INVALID_PAYLOAD');
+
+      const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
+      const values = keys.map((key) => data[key]);
+
+      const finalParams = [...values, clienteId, userId];
+      const clienteParamIdx = values.length + 1;
+      const userParamIdx = values.length + 2;
 
       const result = await (txClient || db).query(
-        `UPDATE usuarios SET ${setClause} WHERE cliente_id = $${values.length} AND (id::text = $${values.length + 1} OR username = $${values.length + 1}) RETURNING *`,
-        [...Object.values(data), clienteId, userId]
+        `UPDATE usuarios SET ${setClause} WHERE cliente_id = $${clienteParamIdx} AND (id::text = $${userParamIdx} OR username = $${userParamIdx}) RETURNING *`,
+        finalParams
       );
 
-      if (result.rows.length === 0) throw new Error('USER_NOT_FOUND: Usuario no encontrado');
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
       return { status: 'success', usuario: result.rows[0] };
     },
 
@@ -142,14 +149,14 @@ class ClientDomain {
 
     'schema-extend': async function (user, payload, txClient = null) {
       const { clienteId, newFields } = payload;
-      if (!clienteId || !newFields) throw new Error('clienteId y newFields son requeridos');
+      if (!clienteId || !newFields) throw new EngineError('INVALID_PAYLOAD');
 
       const result = await (txClient || db).query(
         'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
         [clienteId, JSON.stringify(newFields)]
       );
 
-      if (result.rows.length === 0) throw new Error('Cliente no encontrado');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
 
       return { status: 'success', newConfig: result.rows[0].public_config };
     },

@@ -106,14 +106,14 @@ class MonitorDomain {
 
       // Security check: Only SUPER_ADMIN or the client's own admin/user can see this
       if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
-        throw new Error('FORBIDDEN: No tienes permisos para ver el reporte de este cliente');
+        throw new EngineError('FORBIDDEN');
       }
 
       // 1. Basic Info
       const clientRes = await (txClient || db).query('SELECT * FROM clientes WHERE id = $1', [
         clienteId,
       ]);
-      if (clientRes.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
+      if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       const client = clientRes.rows[0];
 
       // 2. User Count
@@ -123,18 +123,19 @@ class MonitorDomain {
       );
       const totalUsers = parseInt(userCountRes.rows[0].total);
 
-      // 3. Inventory Analysis (JSONB)
-      const config = client.public_config || {};
-      const stock = config.stock || [];
-      const prices = config.precios || {};
+      // 3. Inventory Analysis (Optimized: Moved calculation to SQL)
+      const inventoryRes = await (txClient || db).query(
+        `SELECT 
+          count(item) as total_products,
+          sum((public_config->'precios'->>(item->>'id'))::numeric * (item->>'qty')::numeric) as total_value
+         FROM clientes, 
+         jsonb_array_elements(public_config->'stock') as item 
+         WHERE id = $1`,
+        [clienteId]
+      );
 
-      let totalProducts = stock.length;
-      let totalInventoryValue = 0;
-
-      stock.forEach((item) => {
-        const price = prices[item.id] || prices[item.name] || 0;
-        totalInventoryValue += price * (item.qty || 0);
-      });
+      const totalProducts = parseInt(inventoryRes.rows[0].total_products || 0);
+      const totalInventoryValue = parseFloat(inventoryRes.rows[0].total_value || 0);
 
       return {
         status: 'success',
@@ -150,7 +151,7 @@ class MonitorDomain {
             valor_estimado_inventario: totalInventoryValue,
           },
           config_summary: {
-            has_custom_config: Object.keys(config).length > 0,
+            has_custom_config: Object.keys(client.public_config || {}).length > 0,
             stock_count: totalProducts,
           },
         },
@@ -165,7 +166,7 @@ class MonitorDomain {
         [clienteId]
       );
 
-      if (result.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
 
       return {
         status: 'success',
@@ -187,7 +188,7 @@ class MonitorDomain {
           },
         };
       } catch (e) {
-        throw new Error(`SYSTEM_UNHEALTHY: ${e.message}`);
+        throw new EngineError('SYSTEM_UNHEALTHY', e.message);
       }
     },
   };

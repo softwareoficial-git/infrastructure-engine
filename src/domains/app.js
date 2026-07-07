@@ -105,14 +105,34 @@ class AppDomain {
     'template-publish': async function (user, payload, txClient = null) {
       const { templateId } = payload;
 
-      await (txClient || db).query('UPDATE plantillas SET es_oficial = false');
-      const result = await (txClient || db).query(
-        'UPDATE plantillas SET es_oficial = true WHERE id = $1 RETURNING *',
-        [templateId]
-      );
+      const executePublish = async (client) => {
+        await client.query('UPDATE plantillas SET es_oficial = false');
+        const result = await client.query(
+          'UPDATE plantillas SET es_oficial = true WHERE id = $1 RETURNING *',
+          [templateId]
+        );
+        return result;
+      };
 
-      if (result.rows.length === 0) throw new Error('Plantilla no encontrada');
-      return { status: 'success', message: 'Plantilla publicada', template: result.rows[0] };
+      if (txClient) {
+        const result = await executePublish(txClient);
+        if (result.rows.length === 0) throw new EngineError('TEMPLATE_NOT_FOUND');
+        return { status: 'success', message: 'Plantilla publicada', template: result.rows[0] };
+      }
+
+      const client = await db.getClient();
+      try {
+        await client.query('BEGIN');
+        const result = await executePublish(client);
+        await client.query('COMMIT');
+        if (result.rows.length === 0) throw new EngineError('TEMPLATE_NOT_FOUND');
+        return { status: 'success', message: 'Plantilla publicada', template: result.rows[0] };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     'client-create': async function (user, payload, txClient = null) {
@@ -121,7 +141,7 @@ class AppDomain {
       const templateRes = await (txClient || db).query(
         'SELECT contenido FROM plantillas WHERE es_oficial = true LIMIT 1'
       );
-      if (templateRes.rows.length === 0) throw new Error('No hay una plantilla oficial');
+      if (templateRes.rows.length === 0) throw new EngineError('NO_OFFICIAL_TEMPLATE');
 
       const officialContent = templateRes.rows[0].contenido;
 
@@ -141,7 +161,7 @@ class AppDomain {
         [clienteId, plan]
       );
 
-      if (result.rows.length === 0) throw new Error('Cliente no encontrado');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return {
         status: 'success',
         message: `Plan actualizado a ${plan}`,
@@ -152,24 +172,22 @@ class AppDomain {
     'migrate-global': async function (user, payload, txClient = null) {
       const { targetVersion, transformation } = payload;
 
-      const clients = await (txClient || db).query('SELECT id, public_config FROM clientes');
-
-      for (const client of clients.rows) {
-        let currentConfig = client.public_config;
-
-        if (transformation.add_field) {
-          currentConfig[transformation.add_field] = transformation.default;
-        }
-
+      if (transformation.add_field) {
+        // Perform a bulk update using jsonb_set for all clients in a single query
         await (txClient || db).query(
-          'UPDATE clientes SET public_config = $1, schema_version = $2 WHERE id = $3',
-          [currentConfig, targetVersion, client.id]
+          `UPDATE clientes 
+           SET public_config = jsonb_set(public_config, $1, $2::jsonb, true), 
+               schema_version = $3`,
+          [`{${transformation.add_field}}`, JSON.stringify(transformation.default), targetVersion]
         );
+      } else {
+        // If no specific transformation, just update the version
+        await (txClient || db).query('UPDATE clientes SET schema_version = $1', [targetVersion]);
       }
 
       return {
         status: 'success',
-        message: `Migración a versión ${targetVersion} completada para todos los clientes`,
+        message: `Migración a versión ${targetVersion} completada masivamente para todos los clientes`,
       };
     },
 
@@ -183,7 +201,7 @@ class AppDomain {
         'DELETE FROM clientes WHERE id = $1 RETURNING id',
         [clienteId]
       );
-      if (result.rows.length === 0) throw new Error('Cliente no encontrado');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', message: 'Cliente eliminado' };
     },
   };

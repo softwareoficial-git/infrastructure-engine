@@ -23,11 +23,11 @@ class SystemConfigDomain {
   };
 
   static commands = {
-    'set-global-config': async function (user, payload) {
+    'set-global-config': async function (user, payload, txClient = null) {
       const { key, value } = payload;
-      if (!key || !value) throw new Error('Key y Value son requeridos');
+      if (!key || !value) throw new EngineError('INVALID_PAYLOAD');
 
-      await db.query(
+      await (txClient || db).query(
         'INSERT INTO system_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
         [key, value]
       );
@@ -35,11 +35,14 @@ class SystemConfigDomain {
       return { status: 'success', message: 'Configuración global actualizada' };
     },
 
-    'get-global-config': async function (user, payload) {
+    'get-global-config': async function (user, payload, txClient = null) {
       const { key } = payload;
-      const result = await db.query('SELECT value FROM system_settings WHERE key = $1', [key]);
+      const result = await (txClient || db).query(
+        'SELECT value FROM system_settings WHERE key = $1',
+        [key]
+      );
 
-      if (result.rows.length === 0) throw new Error('Configuración no encontrada');
+      if (result.rows.length === 0) throw new EngineError('CONFIG_NOT_FOUND');
       return { status: 'success', value: result.rows[0].value };
     },
   };

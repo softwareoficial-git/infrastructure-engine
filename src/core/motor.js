@@ -39,6 +39,42 @@ class Motor {
     console.log(`Dominio ${domainName} registrado con ${Object.keys(commands).length} comandos.`);
   }
 
+  async authorize(user, domain) {
+    // 1. Find all roles in the user's hierarchy (User -> Parent -> Grandparent...)
+    const roleChainQuery = `
+      WITH RECURSIVE role_chain AS (
+        SELECT id, nombre, parent_id 
+        FROM roles 
+        WHERE id = $1
+        UNION ALL
+        SELECT r.id, r.nombre, r.parent_id 
+        FROM roles r
+        JOIN role_chain rc ON r.id = rc.parent_id
+      )
+      SELECT nombre FROM role_chain;
+    `;
+
+    const result = await db.query(roleChainQuery, [user.role_id]);
+    const userRoles = result.rows.map((r) => r.nombre);
+
+    // 2. Define which roles have access to which domains
+    // In a fully dynamic system, this mapping would also be in the DB.
+    const domainPermissions = {
+      SYSTEM: ['SUPER_ADMIN'],
+      APP: ['SUPER_ADMIN', 'APP'],
+      CLIENT: ['SUPER_ADMIN', 'APP', 'CLIENTE'],
+      USER: ['SUPER_ADMIN', 'APP', 'CLIENTE', 'USUARIO'],
+      MONITOR: ['SUPER_ADMIN', 'APP', 'CLIENTE', 'USUARIO'],
+    };
+
+    const allowedRoles = domainPermissions[domain] || [];
+    const hasAccess = userRoles.some((role) => allowedRoles.includes(role));
+
+    if (!hasAccess) {
+      throw new EngineError('FORBIDDEN');
+    }
+  }
+
   async execute(user, commandStr, payload, txClient = null) {
     const [rawDomain, action] = commandStr.split(':');
     const domain = rawDomain.toUpperCase();
@@ -58,7 +94,7 @@ class Motor {
 
     const cmdConfig = this.commands[domain][action];
 
-    this.authorize(user, domain);
+    await this.authorize(user, domain);
 
     if (cmdConfig.schema) {
       const validate = ajv.compile(cmdConfig.schema);
@@ -70,55 +106,6 @@ class Motor {
     }
 
     return await cmdConfig.handler(user, payload, txClient);
-  }
-
-  listCommands() {
-    const catalog = {};
-    for (const [domain, actions] of Object.entries(this.commands)) {
-      catalog[domain] = {};
-      for (const [action, config] of Object.entries(actions)) {
-        catalog[domain][action] = {
-          description: config.description,
-          payload: config.schema,
-          possibleErrors: config.possibleErrors,
-        };
-      }
-    }
-    return catalog;
-  }
-
-  async authUser(token) {
-    if (!token) throw new EngineError('AUTH_REQUIRED');
-
-    if (token === 'BOOTSTRAP_TOKEN') {
-      return { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
-    }
-
-    if (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN) {
-      return { id: 0, role_name: 'SUPER_ADMIN', token: process.env.ADMIN_SECRET_TOKEN };
-    }
-
-    const result = await db.query(
-      'SELECT u.*, r.nombre as role_name, r.parent_id FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.token = $1',
-      [token]
-    );
-
-    if (result.rows.length === 0) throw new EngineError('INVALID_TOKEN');
-    return result.rows[0];
-  }
-
-  authorize(user, domain) {
-    const roleHierarchy = {
-      SUPER_ADMIN: ['SYSTEM', 'APP', 'CLIENT', 'USER', 'MONITOR'],
-      APP: ['APP', 'CLIENT', 'USER', 'MONITOR'],
-      CLIENTE: ['CLIENT', 'USER', 'MONITOR'],
-      USUARIO: ['USER', 'MONITOR'],
-    };
-
-    const allowedDomains = roleHierarchy[user.role_name] || [];
-    if (!allowedDomains.includes(domain)) {
-      throw new EngineError('FORBIDDEN');
-    }
   }
 }
 

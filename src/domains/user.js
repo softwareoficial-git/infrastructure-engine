@@ -92,9 +92,12 @@ class UserDomain {
     },
   };
 
-  // Helper to convert dot notation ("a.b.c") to Postgres path array ("{a,b,c}")
+  // Helper to convert dot notation ("a.b.c") to Postgres path array ("{"a","b","c"}")
   static parsePath(path) {
-    return `{${path.split('.').join(',')}}`;
+    return `{${path
+      .split('.')
+      .map((part) => `"${part}"`)
+      .join(',')}}`;
   }
 
   static commands = {
@@ -144,12 +147,23 @@ class UserDomain {
     'push-item': async function (user, payload, txClient = null) {
       const { clienteId, path, item } = { ...payload };
       const pgPath = UserDomain.parsePath(path);
-      // In Postgres, appending to a JSONB array is usually done by getting the current array and concatenating
+
+      // Atomically append to the JSONB array using the || operator directly in SQL
+      // We use jsonb_set to target the specific path and concatenate the new item array
       const result = await (txClient || db).query(
-        'UPDATE clientes SET public_config = jsonb_set(public_config, $2, (public_config #> $2) || $3::jsonb, true) WHERE id = $1 RETURNING public_config',
+        `UPDATE clientes 
+         SET public_config = jsonb_set(
+           public_config, 
+           $2, 
+           (public_config #> $2) || $3::jsonb, 
+           true
+         ) 
+         WHERE id = $1 
+         RETURNING public_config`,
         [clienteId, pgPath, JSON.stringify([item])]
       );
-      if (result.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
+
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 

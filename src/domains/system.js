@@ -144,19 +144,25 @@ class SystemDomain {
       };
 
       for (const roleName of rolesToCreate) {
-        const parentName = hierarchy[roleName];
-        let parentId = null;
+        await (txClient || db).query(
+          'INSERT INTO roles (nombre, parent_id) VALUES ($1, $2) ON CONFLICT (nombre) DO NOTHING',
+          [roleName, null]
+        );
+      }
+
+      for (const [roleName, parentName] of Object.entries(hierarchy)) {
         if (parentName) {
           const parentRes = await (txClient || db).query('SELECT id FROM roles WHERE nombre = $1', [
             parentName,
           ]);
-          if (parentRes.rows.length > 0) parentId = parentRes.rows[0].id;
+          if (parentRes.rows.length > 0) {
+            const parentId = parentRes.rows[0].id;
+            await (txClient || db).query('UPDATE roles SET parent_id = $1 WHERE nombre = $2', [
+              parentId,
+              roleName,
+            ]);
+          }
         }
-
-        await (txClient || db).query(
-          'INSERT INTO roles (nombre, parent_id) VALUES ($1, $2) ON CONFLICT (nombre) DO NOTHING',
-          [roleName, parentId]
-        );
       }
 
       // 3. Crear Super Admin Inicial
