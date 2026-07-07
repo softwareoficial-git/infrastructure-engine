@@ -90,7 +90,7 @@ class SystemDomain {
       }
 
       // 3. Crear Super Admin Inicial
-      const adminToken = 'ADMIN_SECRET_TOKEN_2026';
+      const adminToken = process.env.ADMIN_SECRET_TOKEN;
       await db.query(
         `INSERT INTO usuarios (username, password, role_id, token)
          VALUES ('superadmin', 'admin123', (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN'), $1)

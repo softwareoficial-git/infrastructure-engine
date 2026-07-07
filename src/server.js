@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const motor = require('./core/motor');
 const db = require('./core/db');
