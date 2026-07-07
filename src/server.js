@@ -13,7 +13,21 @@ require('./domains/user');
 require('./domains/monitor');
 
 const app = express();
+// --- LOGGING MIDDLEWARE ---
+const requestLogger = (req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const { command, token } = req.body || {};
+    const user = req.user ? req.user.username : 'Unauthenticated';
+    
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${user} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode} | ${duration}ms`);
+  });
+  next();
+};
+
 app.use(express.json());
+app.use(requestLogger);
 
 const PORT = process.env.PORT || 3001;
 
