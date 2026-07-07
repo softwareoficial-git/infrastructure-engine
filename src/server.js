@@ -152,15 +152,51 @@ app.get('/health', (req, res) => {
 
 async function startServer() {
   try {
+    // 1. Database Connectivity Check
     await db.query('SELECT 1');
     console.log('✅ Infrastructure Engine: Database connected.');
+
+    // 2. Automatic Initialization Check
+    const tablesCheck = await db.query(
+      "SELECT EXISTS (SELECT FROM pg_tables WHERE tablename = 'roles')"
+    );
+    
+    if (!tablesCheck.rows[0].exists) {
+      console.log('🛠️  Database not initialized. Running SYSTEM:init...');
+      const bootstrapUser = { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
+      // We call the logic directly from the domain's command via motor.execute
+      await motor.execute(bootstrapUser, 'SYSTEM:init', {});
+      console.log('✅ System initialized successfully.');
+    } else {
+      console.log('ℹ️  Database already initialized.');
+    }
+
+    // 3. Automatic Migration Check
+    const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
+    const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
+    const TARGET_VERSION = 2; // Update this when you release new schema versions
+
+    if (currentVersion < TARGET_VERSION) {
+      console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
+      const bootstrapUser = { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
+      
+      // Define the transformation for the migration (example: adding a field)
+      const transformation = { add_field: 'migrated_at', default: new Date().toISOString().split('T')[0] };
+      await motor.execute(bootstrapUser, 'APP:migrate-global', { 
+        targetVersion: TARGET_VERSION, 
+        transformation: transformation 
+      });
+      console.log(`✅ Migration to v${TARGET_VERSION} completed.`);
+    } else {
+      console.log(`ℹ️  Database is up to date (v${currentVersion}).`);
+    }
 
     app.listen(PORT, () => {
       console.log(`🚀 Stable Bridge running on http://localhost:${PORT}`);
       console.log(`📡 Developer Endpoint: POST /execute`);
     });
   } catch (error) {
-    console.error('❌ Critical Engine Failure:', error);
+    console.error('❌ Critical Engine Failure during startup:', error);
     process.exit(1);
   }
 }
