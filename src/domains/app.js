@@ -40,6 +40,14 @@ class AppDomain {
       },
       required: ['nombre'],
     },
+    'update-client-plan': {
+      type: 'object',
+      properties: {
+        clienteId: { type: 'integer' },
+        plan: { type: 'string', enum: ['free', 'pro', 'enterprise'] },
+      },
+      required: ['clienteId', 'plan'],
+    },
     'migrate-global': {
       type: 'object',
       properties: {
@@ -54,6 +62,31 @@ class AppDomain {
         clienteId: { type: 'integer' },
       },
       required: ['clienteId'],
+    },
+  };
+
+  static docs = {
+    'client-create': {
+      description: 'Creates a new client with a default official template and a "free" plan.',
+      errors: ['NO_OFFICIAL_TEMPLATE'],
+    },
+    'update-client-plan': {
+      description:
+        "Updates a client's subscription plan (e.g., from free to pro) in their private configuration.",
+      errors: ['CLIENT_NOT_FOUND', 'FORBIDDEN'],
+    },
+    'template-create': { description: 'Creates a global template.', errors: ['INVALID_PAYLOAD'] },
+    'template-publish': {
+      description: 'Sets a template as the official default.',
+      errors: ['TEMPLATE_NOT_FOUND'],
+    },
+    'migrate-global': {
+      description: 'Migrates all clients to a new schema version.',
+      errors: ['DB_ERROR'],
+    },
+    'client-delete': {
+      description: 'Deletes a client and all their users.',
+      errors: ['CLIENT_NOT_FOUND'],
     },
   };
 
@@ -93,11 +126,27 @@ class AppDomain {
       const officialContent = templateRes.rows[0].contenido;
 
       const clientRes = await db.query(
-        'INSERT INTO clientes (nombre, public_config) VALUES ($1, $2) RETURNING *',
-        [nombre, officialContent]
+        'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
+        [nombre, officialContent, JSON.stringify({ plan: 'free' })]
       );
 
       return { status: 'success', cliente: clientRes.rows[0] };
+    },
+
+    'update-client-plan': async function (user, payload) {
+      const { clienteId, plan } = payload;
+
+      const result = await db.query(
+        "UPDATE clientes SET private_config = private_config || jsonb_build_object('plan', $2::text) WHERE id = $1 RETURNING private_config",
+        [clienteId, plan]
+      );
+
+      if (result.rows.length === 0) throw new Error('Cliente no encontrado');
+      return {
+        status: 'success',
+        message: `Plan actualizado a ${plan}`,
+        newPrivateConfig: result.rows[0].private_config,
+      };
     },
 
     'migrate-global': async function (user, payload) {
