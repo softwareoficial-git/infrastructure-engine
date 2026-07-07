@@ -20,8 +20,10 @@ const requestLogger = (req, res, next) => {
     const duration = Date.now() - start;
     const { command, token } = req.body || {};
     const user = req.user ? req.user.username : 'Unauthenticated';
-    
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${user} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode} | ${duration}ms`);
+
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${user} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode} | ${duration}ms`
+    );
   });
   next();
 };
@@ -145,6 +147,35 @@ app.post('/execute', authenticate, async (req, res) => {
   }
 });
 
+// Root route - Developer Documentation
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to the Infrastructure Engine API',
+    documentation: {
+      endpoint: '/execute',
+      method: 'POST',
+      request_format: {
+        token: 'Authentication token (required)',
+        command: 'Command in format DOMAIN:action (required)',
+        payload: 'Optional parameters object',
+      },
+      available_domains: [
+        { domain: 'SYSTEM', description: 'Core system and setup' },
+        { domain: 'APP', description: 'Global application and template management' },
+        { domain: 'CLIENT', description: 'Client-specific operations' },
+        { domain: 'USER', description: 'User and data access' },
+        { domain: 'MONITOR', description: 'System health and analytics' },
+      ],
+      example_request: {
+        token: 'YOUR_TOKEN',
+        command: 'MONITOR:get-system-health',
+        payload: {},
+      },
+      health_check: '/health',
+    },
+  });
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -160,7 +191,7 @@ async function startServer() {
     const tablesCheck = await db.query(
       "SELECT EXISTS (SELECT FROM pg_tables WHERE tablename = 'roles')"
     );
-    
+
     if (!tablesCheck.rows[0].exists) {
       console.log('🛠️  Database not initialized. Running SYSTEM:init...');
       const bootstrapUser = { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
@@ -179,12 +210,15 @@ async function startServer() {
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
       const bootstrapUser = { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
-      
+
       // Define the transformation for the migration (example: adding a field)
-      const transformation = { add_field: 'migrated_at', default: new Date().toISOString().split('T')[0] };
-      await motor.execute(bootstrapUser, 'APP:migrate-global', { 
-        targetVersion: TARGET_VERSION, 
-        transformation: transformation 
+      const transformation = {
+        add_field: 'migrated_at',
+        default: new Date().toISOString().split('T')[0],
+      };
+      await motor.execute(bootstrapUser, 'APP:migrate-global', {
+        targetVersion: TARGET_VERSION,
+        transformation: transformation,
       });
       console.log(`✅ Migration to v${TARGET_VERSION} completed.`);
     } else {
