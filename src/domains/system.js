@@ -50,7 +50,7 @@ class SystemDomain {
         limit: { type: 'integer', default: 50 },
         offset: { type: 'integer', default: 0 },
       },
-      required: ['tenantId'],
+      required: [],
     },
     'events-filter': {
       type: 'object',
@@ -391,9 +391,16 @@ class SystemDomain {
     'events-list': async function (user, payload, txClient = null) {
       const { tenantId, userId, startDate, endDate, limit = 50, offset = 0 } = payload;
 
-      let query = 'SELECT * FROM system_events WHERE tenant_id = $1';
-      const params = [tenantId];
-      let paramIdx = 2;
+      let query = 'SELECT * FROM system_events WHERE 1=1';
+      const params = [];
+      let paramIdx = 1;
+
+      if (tenantId !== undefined && tenantId !== null) {
+        query += ` AND tenant_id = $${paramIdx++}`;
+        params.push(tenantId);
+      } else if (tenantId === null) {
+        query += ` AND tenant_id IS NULL`;
+      }
 
       if (userId) {
         query += ` AND user_id = $${paramIdx++}`;
