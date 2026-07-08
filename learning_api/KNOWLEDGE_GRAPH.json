@@ -1,0 +1,10 @@
+{
+  "system_version": "1.0",
+  "total_commands_mapped": 0,
+  "verified_commands": [],
+  "theoretical_commands": [],
+  "learning_metrics": {
+    "happy_path_coverage": 0,
+    "error_mapping_coverage": 0
+  }
+}

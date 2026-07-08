@@ -98,6 +98,64 @@ const authenticate = async (req, res, next) => {
 };
 
 /**
+ * Public Registration Endpoint
+ * Bypasses authentication to allow new users to create a client and account.
+ */
+app.post('/register', async (req, res) => {
+  const requestId = req.headers['x-request-id'] || uuidv4();
+  const { username, password, nombreCliente } = req.body;
+
+  if (!username || !password || !nombreCliente) {
+    return sendResponse(
+      res,
+      400,
+      'error',
+      null,
+      { code: 'MISSING_FIELDS', message: 'username, password, and nombreCliente are required.' },
+      requestId
+    );
+  }
+
+  try {
+    // Use a GUEST user context to bypass role-based authorization in the motor
+    const guestUser = { role_name: 'GUEST', role_id: null };
+    const result = await motor.execute(guestUser, 'APP:self-register', {
+      username,
+      password,
+      nombreCliente,
+    });
+    return sendResponse(res, 201, 'success', result, null, requestId);
+  } catch (error) {
+    let statusCode = 400;
+    let code = 'INTERNAL_ERROR';
+    let solution = 'Please check the documentation or contact support.';
+    let details = null;
+
+    if (error.name === 'EngineError') {
+      code = error.code;
+      solution = error.solution;
+      details = error.details;
+    } else {
+      statusCode = 500;
+    }
+
+    return sendResponse(
+      res,
+      statusCode,
+      'error',
+      null,
+      {
+        code: code,
+        message: error.message,
+        solution: solution,
+        details: details,
+      },
+      requestId
+    );
+  }
+});
+
+/**
  * Generic execution endpoint
  * This is the stable bridge for developers to build business logic on top.
  */

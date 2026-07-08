@@ -42,6 +42,16 @@ class Motor {
   }
 
   async authorize(user, domain) {
+    // Allow guest access for specific domains or if user is marked as GUEST
+    if (!user || user.role_name === 'GUEST') {
+      const publicDomains = ['APP']; // Define which domains have public commands
+      if (publicDomains.includes(domain)) {
+        // Note: The actual command handler should still verify if the specific action is public
+        return;
+      }
+      throw new EngineError('FORBIDDEN');
+    }
+
     // 1. Find all roles in the user's hierarchy (User -> Parent -> Grandparent...)
     const roleChainQuery = `
       WITH RECURSIVE role_chain AS (

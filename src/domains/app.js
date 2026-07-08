@@ -62,6 +62,15 @@ class AppDomain {
       },
       required: ['clienteId'],
     },
+    'self-register': {
+      type: 'object',
+      properties: {
+        nombreCliente: { type: 'string', minLength: 1 },
+        username: { type: 'string', minLength: 3 },
+        password: { type: 'string', minLength: 6 },
+      },
+      required: ['nombreCliente', 'username', 'password'],
+    },
   };
 
   static docs = {
@@ -86,6 +95,10 @@ class AppDomain {
     'client-delete': {
       description: 'Deletes a client and all their users.',
       errors: ['CLIENT_NOT_FOUND'],
+    },
+    'self-register': {
+      description: 'Public endpoint to register a new client and its administrative user.',
+      errors: ['USER_EXISTS', 'NO_OFFICIAL_TEMPLATE', 'DB_ERROR'],
     },
   };
 
@@ -192,13 +205,76 @@ class AppDomain {
 
     'client-delete': async function (user, payload) {
       const { clienteId } = payload;
-
       // Delete associated users first to avoid FK violation
       await db.query('DELETE FROM usuarios WHERE cliente_id = $1', [clienteId]);
 
       const result = await db.query('DELETE FROM clientes WHERE id = $1 RETURNING id', [clienteId]);
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', message: 'Cliente eliminado' };
+    },
+
+    'self-register': async function (user, payload) {
+      const { nombreCliente, username, password } = payload;
+      const { v4: uuidv4 } = require('uuid');
+
+      // 1. Check if username already exists
+      const userCheck = await db.query('SELECT id FROM usuarios WHERE username = $1', [username]);
+      if (userCheck.rows.length > 0) {
+        throw new EngineError('USER_EXISTS', `The username '${username}' is already taken.`);
+      }
+
+      const client = await db.getClient();
+      try {
+        await client.query('BEGIN');
+
+        // 2. Create Client (Logic mirrored from client-create)
+        const templateRes = await client.query(
+          'SELECT contenido FROM plantillas WHERE es_oficial = true LIMIT 1'
+        );
+        if (templateRes.rows.length === 0) throw new EngineError('NO_OFFICIAL_TEMPLATE');
+        const officialContent = templateRes.rows[0].contenido;
+
+        const clientRes = await client.query(
+          'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
+          [nombreCliente, officialContent, JSON.stringify({ plan: 'free' })]
+        );
+        const newCliente = clientRes.rows[0];
+
+        // 3. Find the 'CLIENTE' role ID
+        const roleRes = await client.query("SELECT id FROM roles WHERE nombre = 'CLIENTE'");
+        if (roleRes.rows.length === 0)
+          throw new EngineError('INTERNAL_ERROR', 'Role CLIENTE not found.');
+        const roleId = roleRes.rows[0].id;
+
+        // 4. Create User
+        const token = uuidv4();
+        const userRes = await client.query(
+          'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+          [username, password, roleId, token, newCliente.id]
+        );
+        const newUser = userRes.rows[0];
+
+        await client.query('COMMIT');
+
+        return {
+          status: 'success',
+          message: 'Registration successful',
+          cliente: {
+            id: newCliente.id,
+            nombre: newCliente.nombre,
+          },
+          user: {
+            id: newUser.id,
+            username: newUser.username,
+            token: token,
+          },
+        };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     },
   };
 }
