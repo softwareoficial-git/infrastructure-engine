@@ -44,9 +44,14 @@ const requestLogger = (req, res, next) => {
         token: 'BOOTSTRAP_TOKEN',
       };
 
-      // Ensure IDs are integers or null to satisfy Ajv schema
-      const tenantId = user ? user.cliente_id : parseInt(body.tenantId) || 1;
-      const userId = user ? user.id : parseInt(body.userId) || null;
+      // Ensure IDs are integers or null and handle cases where user exists but lacks a cliente_id (e.g. admin)
+      const tenantId =
+        user && user.role_name === 'SUPER_ADMIN'
+          ? 1
+          : user && typeof user.cliente_id === 'number'
+            ? user.cliente_id
+            : parseInt(body.tenantId) || 1;
+      const userId = user && typeof user.id === 'number' ? user.id : parseInt(body.userId) || null;
 
       await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
         tenantId: tenantId,
