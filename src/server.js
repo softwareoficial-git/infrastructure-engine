@@ -263,18 +263,45 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to the Infrastructure Engine API',
     documentation: {
-      endpoint: '/execute',
-      method: 'POST',
-      request_format: {
-        token: 'Authentication token (required)',
-        command: 'Command in format DOMAIN:action (required)',
-        payload: 'Optional parameters object',
+      onboarding: {
+        step: 1,
+        endpoint: '/register',
+        method: 'POST',
+        description: 'Create a new client account and obtain your access token.',
+        request_format: {
+          username: 'Desired username',
+          password: 'Secure password',
+          nombreCliente: 'Name of your business/tenant',
+        },
+        response: 'Returns token and clienteId needed for subsequent requests.',
+      },
+      execution: {
+        step: 2,
+        endpoint: '/execute',
+        method: 'POST',
+        description: 'Execute domain-based commands using your token.',
+        request_format: {
+          token: 'Authentication token obtained from /register',
+          command: 'Command in format DOMAIN:action',
+          payload: 'Optional parameters object',
+        },
       },
       available_commands: commands,
-      example_request: {
-        token: 'YOUR_TOKEN',
-        command: 'MONITOR:get-system-health',
-        payload: {},
+      example_registration: {
+        endpoint: '/register',
+        body: {
+          username: 'dev_user',
+          password: 'password123',
+          nombreCliente: 'Dev Studio',
+        },
+      },
+      example_execution: {
+        endpoint: '/execute',
+        body: {
+          token: 'TOKEN_FROM_REGISTRATION',
+          command: 'MONITOR:get-system-health',
+          payload: {},
+        },
       },
       health_check: '/health',
     },
