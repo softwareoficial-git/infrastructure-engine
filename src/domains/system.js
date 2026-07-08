@@ -38,7 +38,7 @@ class SystemDomain {
         request_id: { type: 'string' },
         payload: { type: 'object' },
       },
-      required: ['tenantId', 'status', 'source'],
+      required: ['status', 'source'],
     },
     'events-list': {
       type: 'object',

@@ -248,6 +248,11 @@ app.post('/execute', authenticate, async (req, res) => {
       solution = error.solution;
       details = error.details;
 
+      if (code === 'INVALID_PAYLOAD') {
+        // Enhance the message for payload errors to be more instructive
+        error.message = `The request payload for command '${command}' is incorrect. ${error.details || ''}`;
+      }
+
       if (code === 'FORBIDDEN') statusCode = 403;
       else if (code === 'CMD_NOT_FOUND') statusCode = 404;
       else if (code === 'INVALID_TOKEN' || code === 'AUTH_REQUIRED') statusCode = 401;
@@ -355,7 +360,7 @@ async function startServer() {
     // 3. Automatic Migration Check
     const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 4; // Updated to v4 for Granular Traceability
+    const TARGET_VERSION = 5; // Updated to v5 for JSONB NOT NULL enforcement
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
