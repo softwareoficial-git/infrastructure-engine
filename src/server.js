@@ -50,24 +50,28 @@ const performEventLog = async (req, res, command, status, errorCode = null, cust
     const payload = body.payload || {};
 
     // Robust tenantId resolution
-    let tenantId = null;
-    const candidateTenantId = body.tenantId || payload.tenantId || payload.clienteId;
-    if (candidateTenantId !== undefined && candidateTenantId !== null) {
-      tenantId = parseInt(candidateTenantId, 10);
-    }
-    if (tenantId === null || isNaN(tenantId)) {
-      tenantId = user && typeof user.cliente_id === 'number' ? user.cliente_id : null;
+    let tenantId = customPayload.tenantId || null;
+    if (!tenantId) {
+      const candidateTenantId = body.tenantId || payload.tenantId || payload.clienteId;
+      if (candidateTenantId !== undefined && candidateTenantId !== null) {
+        tenantId = parseInt(candidateTenantId, 10);
+      }
+      if (tenantId === null || isNaN(tenantId)) {
+        tenantId = user && typeof user.cliente_id === 'number' ? user.cliente_id : null;
+      }
     }
 
     // Robust userId resolution
-    let userId = null;
-    if (user && typeof user.id === 'number') {
-      userId = user.id;
-    } else {
-      const candidateUserId = body.userId || payload.userId;
-      if (candidateUserId !== undefined && candidateUserId !== null) {
-        const parsedUserId = parseInt(candidateUserId, 10);
-        if (!isNaN(parsedUserId)) userId = parsedUserId;
+    let userId = customPayload.userId || null;
+    if (!userId) {
+      if (user && typeof user.id === 'number') {
+        userId = user.id;
+      } else {
+        const candidateUserId = body.userId || payload.userId;
+        if (candidateUserId !== undefined && candidateUserId !== null) {
+          const parsedUserId = parseInt(candidateUserId, 10);
+          if (!isNaN(parsedUserId)) userId = parsedUserId;
+        }
       }
     }
 
@@ -185,7 +189,15 @@ app.post('/register', async (req, res) => {
       nombreCliente,
     });
 
-    await performEventLog(req, res, 'APP:self-register', 'SUCCESS');
+    // Capture the new IDs to avoid orphan events
+    const newTenantId = result.data?.cliente?.id || result.cliente?.id;
+    const newUserId = result.data?.user?.id || result.user?.id;
+
+    await performEventLog(req, res, 'APP:self-register', 'SUCCESS', null, {
+      duration: 0,
+      tenantId: newTenantId,
+      userId: newUserId,
+    });
     return sendResponse(res, 201, 'success', result, null, requestId);
   } catch (error) {
     let statusCode = 400;
