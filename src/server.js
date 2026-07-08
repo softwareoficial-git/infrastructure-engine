@@ -18,7 +18,8 @@ const requestLogger = (req, res, next) => {
   const start = Date.now();
   res.on('finish', async () => {
     const duration = Date.now() - start;
-    const { command, token } = req.body || {};
+    const body = req.body || {};
+    const { command } = body;
     const user = req.user ? req.user : null;
     const username = user ? user.username : 'Unauthenticated';
 
@@ -32,6 +33,9 @@ const requestLogger = (req, res, next) => {
     );
 
     // AUTOMATIC EVENT LOGGING
+    // Prevent recursive logging of the log-event command itself
+    if (command === 'SYSTEM:log-event') return;
+
     try {
       const bootstrapUser = {
         id: 0,
@@ -39,9 +43,14 @@ const requestLogger = (req, res, next) => {
         role_id: 1,
         token: 'BOOTSTRAP_TOKEN',
       };
+
+      // Ensure IDs are integers or null to satisfy Ajv schema
+      const tenantId = user ? user.cliente_id : parseInt(body.tenantId) || 1;
+      const userId = user ? user.id : parseInt(body.userId) || null;
+
       await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
-        tenantId: user ? user.cliente_id : req.body.tenantId || 1,
-        userId: user ? user.id : req.body.userId || null,
+        tenantId: tenantId,
+        userId: userId,
         command: command || 'N/A',
         status: res.statusCode >= 400 ? 'ERROR' : 'SUCCESS',
         errorCode: res.errorCode || null,
@@ -55,7 +64,10 @@ const requestLogger = (req, res, next) => {
         },
       });
     } catch (logError) {
-      console.error('❌ Internal Event Logging Error:', logError.message);
+      // Silent failure for background logging to avoid polluting logs further
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`❌ Internal Event Logging Error: ${logError.message}`);
+      }
     }
   });
   next();
