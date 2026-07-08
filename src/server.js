@@ -344,7 +344,7 @@ async function startServer() {
     // 3. Automatic Migration Check
     const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 3; // Updated to v3 for System Events
+    const TARGET_VERSION = 4; // Updated to v4 for Granular Traceability
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
