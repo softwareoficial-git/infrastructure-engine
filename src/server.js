@@ -188,16 +188,28 @@ app.post('/execute', authenticate, async (req, res) => {
       const user = req.user;
       const body = req.body || {};
       const payload = body.payload || {};
-      const tenantId =
-        parseInt(body.tenantId) ||
-        parseInt(payload.tenantId) ||
-        parseInt(payload.clienteId) ||
-        (user && typeof user.cliente_id === 'number' ? user.cliente_id : null) ||
-        (user && user.role_name === 'SUPER_ADMIN' ? 1 : 1);
-      const userId =
-        user && typeof user.id === 'number'
-          ? user.id
-          : parseInt(body.userId) || parseInt(payload.userId) || null;
+
+      // Robust tenantId resolution
+      let tenantId = null;
+      const candidateTenantId = body.tenantId || payload.tenantId || payload.clienteId;
+      if (candidateTenantId !== undefined && candidateTenantId !== null) {
+        tenantId = parseInt(candidateTenantId, 10);
+      }
+      if (tenantId === null || isNaN(tenantId)) {
+        tenantId = user && typeof user.cliente_id === 'number' ? user.cliente_id : 1;
+      }
+
+      // Robust userId resolution
+      let userId = null;
+      if (user && typeof user.id === 'number') {
+        userId = user.id;
+      } else {
+        const candidateUserId = body.userId || payload.userId;
+        if (candidateUserId !== undefined && candidateUserId !== null) {
+          const parsedUserId = parseInt(candidateUserId, 10);
+          if (!isNaN(parsedUserId)) userId = parsedUserId;
+        }
+      }
 
       await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
         tenantId,
@@ -206,8 +218,8 @@ app.post('/execute', authenticate, async (req, res) => {
         status,
         errorCode,
         source: 'BACKEND',
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
+        ip_address: req.ip || '0.0.0.0',
+        user_agent: req.headers['user-agent'] || 'unknown-agent',
         app_id: req.headers['x-app-id'] || 'unknown-app',
         request_id: requestId,
         payload: {
@@ -217,7 +229,6 @@ app.post('/execute', authenticate, async (req, res) => {
         },
       });
     } catch (e) {
-      // Always log error to console in all environments to prevent silent failures of the audit system
       console.error(`❌ Critical Event Log Error: ${e.message}`);
     }
   };
