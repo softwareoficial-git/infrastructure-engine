@@ -211,7 +211,8 @@ app.post('/execute', authenticate, async (req, res) => {
         },
       });
     } catch (e) {
-      if (process.env.NODE_ENV !== 'production') console.error(`❌ Event Log Error: ${e.message}`);
+      // Always log error to console in all environments to prevent silent failures of the audit system
+      console.error(`❌ Critical Event Log Error: ${e.message}`);
     }
   };
 

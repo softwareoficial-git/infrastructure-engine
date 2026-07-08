@@ -44,12 +44,16 @@ class Motor {
   async authorize(user, domain) {
     // Allow guest access for specific domains or if user is marked as GUEST
     if (!user || user.role_name === 'GUEST') {
-      const publicDomains = ['APP']; // Define which domains have public commands
+      const publicDomains = ['APP'];
       if (publicDomains.includes(domain)) {
-        // Note: The actual command handler should still verify if the specific action is public
         return;
       }
       throw new EngineError('FORBIDDEN');
+    }
+
+    // TRUSTED BOOTSTRAP: If the user is explicitly a SUPER_ADMIN, allow access immediately
+    if (user.role_name === 'SUPER_ADMIN') {
+      return;
     }
 
     // 1. Find all roles in the user's hierarchy (User -> Parent -> Grandparent...)
@@ -70,7 +74,6 @@ class Motor {
     const userRoles = result.rows.map((r) => r.nombre);
 
     // 2. Define which roles have access to which domains
-    // In a fully dynamic system, this mapping would also be in the DB.
     const domainPermissions = {
       SYSTEM: ['SUPER_ADMIN'],
       APP: ['SUPER_ADMIN', 'APP'],
