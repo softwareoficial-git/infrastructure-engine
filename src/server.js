@@ -16,10 +16,11 @@ const app = express();
 // --- LOGGING MIDDLEWARE ---
 const requestLogger = (req, res, next) => {
   const start = Date.now();
-  res.on('finish', () => {
+  res.on('finish', async () => {
     const duration = Date.now() - start;
-    const { command } = req.body || {};
-    const user = req.user ? req.user.username : 'Unauthenticated';
+    const { command, token } = req.body || {};
+    const user = req.user ? req.user : null;
+    const username = user ? user.username : 'Unauthenticated';
 
     let errorInfo = '';
     if (res.statusCode >= 400) {
@@ -27,8 +28,35 @@ const requestLogger = (req, res, next) => {
     }
 
     console.log(
-      `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${user} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode}${errorInfo} | ${duration}ms`
+      `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${username} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode}${errorInfo} | ${duration}ms`
     );
+
+    // AUTOMATIC EVENT LOGGING
+    try {
+      const bootstrapUser = {
+        id: 0,
+        role_name: 'SUPER_ADMIN',
+        role_id: 1,
+        token: 'BOOTSTRAP_TOKEN',
+      };
+      await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
+        tenantId: user ? user.cliente_id : req.body.tenantId || 1,
+        userId: user ? user.id : req.body.userId || null,
+        command: command || 'N/A',
+        status: res.statusCode >= 400 ? 'ERROR' : 'SUCCESS',
+        errorCode: res.errorCode || null,
+        source: 'BACKEND',
+        payload: {
+          duration,
+          requestId: req.requestId,
+          url: req.url,
+          method: req.method,
+          ip: req.ip,
+        },
+      });
+    } catch (logError) {
+      console.error('❌ Internal Event Logging Error:', logError.message);
+    }
   });
   next();
 };
