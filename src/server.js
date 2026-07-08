@@ -75,24 +75,31 @@ const performEventLog = async (req, res, command, status, errorCode = null, cust
       }
     }
 
-    await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
-      tenantId,
-      userId,
-      command: command || 'N/A',
-      status,
-      errorCode,
-      source: 'BACKEND',
-      ip_address: req.ip || '0.0.0.0',
-      user_agent: req.headers['user-agent'] || 'unknown-agent',
-      app_id: req.headers['x-app-id'] || 'unknown-app',
-      request_id: req.requestId || uuidv4(),
-      payload: {
-        ...customPayload,
-        input_payload: body.payload || body, // Store what the user sent
-        url: req.url,
-        method: req.method,
-      },
-    });
+    await db.query(
+      `INSERT INTO system_events (
+        tenant_id, user_id, command, status, error_code, source,
+        ip_address, user_agent, app_id, request_id, payload
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        tenantId,
+        userId,
+        command || 'N/A',
+        status,
+        errorCode,
+        'BACKEND',
+        req.ip || '0.0.0.0',
+        req.headers['user-agent'] || 'unknown-agent',
+        req.headers['x-app-id'] || 'unknown-app',
+        req.requestId || uuidv4(),
+        {
+          ...customPayload,
+          input_payload: body.payload || body,
+          url: req.url,
+          method: req.method,
+        },
+      ]
+    );
   } catch (e) {
     console.error(`❌ Critical Event Log Error: ${e.message}`);
   }
