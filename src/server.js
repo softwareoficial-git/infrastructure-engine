@@ -35,6 +35,65 @@ const requestLogger = (req, res, next) => {
   next();
 };
 
+// --- GLOBAL EVENT LOGGER HELPER ---
+const performEventLog = async (req, res, command, status, errorCode = null, customPayload = {}) => {
+  try {
+    const bootstrapUser = {
+      id: 0,
+      role_name: 'SUPER_ADMIN',
+      role_id: 1,
+      token: 'BOOTSTRAP_TOKEN',
+    };
+
+    const user = req.user || null;
+    const body = req.body || {};
+    const payload = body.payload || {};
+
+    // Robust tenantId resolution
+    let tenantId = null;
+    const candidateTenantId = body.tenantId || payload.tenantId || payload.clienteId;
+    if (candidateTenantId !== undefined && candidateTenantId !== null) {
+      tenantId = parseInt(candidateTenantId, 10);
+    }
+    if (tenantId === null || isNaN(tenantId)) {
+      tenantId = user && typeof user.cliente_id === 'number' ? user.cliente_id : null;
+    }
+
+    // Robust userId resolution
+    let userId = null;
+    if (user && typeof user.id === 'number') {
+      userId = user.id;
+    } else {
+      const candidateUserId = body.userId || payload.userId;
+      if (candidateUserId !== undefined && candidateUserId !== null) {
+        const parsedUserId = parseInt(candidateUserId, 10);
+        if (!isNaN(parsedUserId)) userId = parsedUserId;
+      }
+    }
+
+    await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
+      tenantId,
+      userId,
+      command: command || 'N/A',
+      status,
+      errorCode,
+      source: 'BACKEND',
+      ip_address: req.ip || '0.0.0.0',
+      user_agent: req.headers['user-agent'] || 'unknown-agent',
+      app_id: req.headers['x-app-id'] || 'unknown-app',
+      request_id: req.requestId || uuidv4(),
+      payload: {
+        ...customPayload,
+        input_payload: body.payload || body, // Store what the user sent
+        url: req.url,
+        method: req.method,
+      },
+    });
+  } catch (e) {
+    console.error(`❌ Critical Event Log Error: ${e.message}`);
+  }
+};
+
 app.use(express.json());
 app.use(requestLogger);
 
@@ -103,6 +162,7 @@ const authenticate = async (req, res, next) => {
  */
 app.post('/register', async (req, res) => {
   const requestId = req.headers['x-request-id'] || uuidv4();
+  req.requestId = requestId;
   const { username, password, nombreCliente } = req.body;
 
   if (!username || !password || !nombreCliente) {
@@ -124,6 +184,8 @@ app.post('/register', async (req, res) => {
       password,
       nombreCliente,
     });
+
+    await performEventLog(req, res, 'APP:self-register', 'SUCCESS');
     return sendResponse(res, 201, 'success', result, null, requestId);
   } catch (error) {
     let statusCode = 400;
@@ -138,6 +200,8 @@ app.post('/register', async (req, res) => {
     } else {
       statusCode = 500;
     }
+
+    await performEventLog(req, res, 'APP:self-register', 'ERROR', code);
 
     return sendResponse(
       res,
@@ -175,67 +239,9 @@ app.post('/execute', authenticate, async (req, res) => {
     );
   }
 
-  // Helper for background logging to avoid repetition
-  const logAutomaticEvent = async (status, errorCode = null) => {
-    if (command === 'SYSTEM:log-event') return;
-    try {
-      const bootstrapUser = {
-        id: 0,
-        role_name: 'SUPER_ADMIN',
-        role_id: 1,
-        token: 'BOOTSTRAP_TOKEN',
-      };
-      const user = req.user;
-      const body = req.body || {};
-      const payload = body.payload || {};
-
-      // Robust tenantId resolution
-      let tenantId = null;
-      const candidateTenantId = body.tenantId || payload.tenantId || payload.clienteId;
-      if (candidateTenantId !== undefined && candidateTenantId !== null) {
-        tenantId = parseInt(candidateTenantId, 10);
-      }
-      if (tenantId === null || isNaN(tenantId)) {
-        tenantId = user && typeof user.cliente_id === 'number' ? user.cliente_id : 1;
-      }
-
-      // Robust userId resolution
-      let userId = null;
-      if (user && typeof user.id === 'number') {
-        userId = user.id;
-      } else {
-        const candidateUserId = body.userId || payload.userId;
-        if (candidateUserId !== undefined && candidateUserId !== null) {
-          const parsedUserId = parseInt(candidateUserId, 10);
-          if (!isNaN(parsedUserId)) userId = parsedUserId;
-        }
-      }
-
-      await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
-        tenantId,
-        userId,
-        command: command || 'N/A',
-        status,
-        errorCode,
-        source: 'BACKEND',
-        ip_address: req.ip || '0.0.0.0',
-        user_agent: req.headers['user-agent'] || 'unknown-agent',
-        app_id: req.headers['x-app-id'] || 'unknown-app',
-        request_id: requestId,
-        payload: {
-          duration: Date.now() - start,
-          url: req.url,
-          method: req.method,
-        },
-      });
-    } catch (e) {
-      console.error(`❌ Critical Event Log Error: ${e.message}`);
-    }
-  };
-
   try {
     const result = await motor.execute(req.user, command, payload || {});
-    await logAutomaticEvent('SUCCESS');
+    await performEventLog(req, res, command, 'SUCCESS', null, { duration: Date.now() - start });
     return sendResponse(res, 200, 'success', result, null, requestId);
   } catch (error) {
     let statusCode = 400;
@@ -261,7 +267,7 @@ app.post('/execute', authenticate, async (req, res) => {
     }
 
     res.errorCode = code; // Attach error code for the logger
-    await logAutomaticEvent('ERROR', code);
+    await performEventLog(req, res, command, 'ERROR', code, { duration: Date.now() - start });
 
     return sendResponse(
       res,
