@@ -154,7 +154,7 @@ class UserDomain {
          SET public_config = jsonb_set(
            COALESCE(public_config, '{}'::jsonb),
            $2,
-           (COALESCE(public_config, '{}'::jsonb) #> $2) || $3::jsonb,
+           COALESCE(public_config #> $2, '[]'::jsonb) || $3::jsonb,
            true
          )
          WHERE id = $1
