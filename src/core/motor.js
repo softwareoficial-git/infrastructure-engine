@@ -1,7 +1,9 @@
 const db = require('./db');
 const Ajv = require('ajv');
+const addFormats = require('ajv-formats');
 const { EngineError } = require('./errors');
 const ajv = new Ajv();
+addFormats(ajv);
 
 class Motor {
   constructor() {
