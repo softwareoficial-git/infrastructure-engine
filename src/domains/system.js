@@ -488,6 +488,51 @@ class SystemDomain {
 
       return { status: 'success', archived_count: moveResult.rowCount };
     },
+
+    'migrate-schema': async function (user, payload, txClient = null) {
+      const { targetVersion } = payload;
+      const client = txClient || db;
+
+      // 1. Get current version from 'clientes' table (using the first client as reference)
+      const versionCheck = await client.query('SELECT schema_version FROM clientes LIMIT 1');
+      const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
+
+      console.log(`Migrating schema from v${currentVersion} to v${targetVersion}...`);
+
+      if (currentVersion < 3 && targetVersion >= 3) {
+        console.log('Applying Migration v3: Creating system_events table...');
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS system_events (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER,
+            user_id INTEGER,
+            command VARCHAR(100),
+            status VARCHAR(20),
+            error_code VARCHAR(50),
+            source VARCHAR(50),
+            payload JSONB DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);
+          CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id);
+          CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);
+          CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);
+        `);
+
+        // Update version in clientes table
+        await client.query('UPDATE clientes SET schema_version = 3');
+        console.log('✅ Migration v3 completed.');
+      }
+
+      return {
+        status: 'success',
+        from: currentVersion,
+        to: targetVersion,
+        message: 'Schema migration completed successfully',
+      };
+    },
   };
 }
 

@@ -207,20 +207,14 @@ async function startServer() {
     // 3. Automatic Migration Check
     const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 2; // Update this when you release new schema versions
+    const TARGET_VERSION = 3; // Updated to v3 for System Events
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
       const bootstrapUser = { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
 
-      // Define the transformation for the migration (example: adding a field)
-      const transformation = {
-        add_field: 'migrated_at',
-        default: new Date().toISOString().split('T')[0],
-      };
-      await motor.execute(bootstrapUser, 'APP:migrate-global', {
+      await motor.execute(bootstrapUser, 'SYSTEM:migrate-schema', {
         targetVersion: TARGET_VERSION,
-        transformation: transformation,
       });
       console.log(`✅ Migration to v${TARGET_VERSION} completed.`);
     } else {
