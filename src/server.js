@@ -211,7 +211,12 @@ async function startServer() {
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
-      const bootstrapUser = { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
+      const bootstrapUser = {
+        id: 0,
+        role_name: 'SUPER_ADMIN',
+        role_id: 1,
+        token: 'BOOTSTRAP_TOKEN',
+      };
 
       await motor.execute(bootstrapUser, 'SYSTEM:migrate-schema', {
         targetVersion: TARGET_VERSION,
