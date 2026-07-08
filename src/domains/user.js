@@ -114,7 +114,7 @@ class UserDomain {
     write: async function (user, payload) {
       const { clienteId, data } = payload;
       const result = await db.query(
-        'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
+        "UPDATE clientes SET public_config = COALESCE(public_config, '{}'::jsonb) || $2 WHERE id = $1 RETURNING public_config",
         [clienteId, JSON.stringify(data)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
@@ -138,7 +138,7 @@ class UserDomain {
       const { clienteId, path, value } = payload;
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
-        'UPDATE clientes SET public_config = jsonb_set(public_config, $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config',
+        "UPDATE clientes SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config",
         [clienteId, pgPath, JSON.stringify(value)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
