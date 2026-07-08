@@ -127,11 +127,11 @@ class Motor {
     if (!token) throw new EngineError('AUTH_REQUIRED');
 
     if (token === 'BOOTSTRAP_TOKEN') {
-      return { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
+      return { id: 0, role_name: 'SUPER_ADMIN', role_id: 1, token: 'BOOTSTRAP_TOKEN' };
     }
 
     if (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN) {
-      return { id: 0, role_name: 'SUPER_ADMIN', token: process.env.ADMIN_SECRET_TOKEN };
+      return { id: 0, role_name: 'SUPER_ADMIN', role_id: 1, token: process.env.ADMIN_SECRET_TOKEN };
     }
 
     const result = await db.query(
