@@ -90,10 +90,10 @@ class AppDomain {
   };
 
   static commands = {
-    'template-create': async function (user, payload, txClient = null) {
+    'template-create': async function (user, payload) {
       const { nombre, contenido } = payload;
 
-      const result = await (txClient || db).query(
+      const result = await db.query(
         'INSERT INTO plantillas (nombre, contenido) VALUES ($1, $2) RETURNING *',
         [nombre, contenido]
       );
@@ -134,17 +134,17 @@ class AppDomain {
       }
     },
 
-    'client-create': async function (user, payload, txClient = null) {
+    'client-create': async function (user, payload) {
       const { nombre } = payload;
 
-      const templateRes = await (txClient || db).query(
+      const templateRes = await db.query(
         'SELECT contenido FROM plantillas WHERE es_oficial = true LIMIT 1'
       );
       if (templateRes.rows.length === 0) throw new EngineError('NO_OFFICIAL_TEMPLATE');
 
       const officialContent = templateRes.rows[0].contenido;
 
-      const clientRes = await (txClient || db).query(
+      const clientRes = await db.query(
         'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
         [nombre, officialContent, JSON.stringify({ plan: 'free' })]
       );
@@ -152,10 +152,10 @@ class AppDomain {
       return { status: 'success', cliente: clientRes.rows[0] };
     },
 
-    'update-client-plan': async function (user, payload, txClient = null) {
+    'update-client-plan': async function (user, payload) {
       const { clienteId, plan } = payload;
 
-      const result = await (txClient || db).query(
+      const result = await db.query(
         "UPDATE clientes SET private_config = private_config || jsonb_build_object('plan', $2::text) WHERE id = $1 RETURNING private_config",
         [clienteId, plan]
       );
@@ -168,12 +168,12 @@ class AppDomain {
       };
     },
 
-    'migrate-global': async function (user, payload, txClient = null) {
+    'migrate-global': async function (user, payload) {
       const { targetVersion, transformation } = payload;
 
       if (transformation.add_field) {
         // Perform a bulk update using jsonb_set for all clients in a single query
-        await (txClient || db).query(
+        await db.query(
           `UPDATE clientes
            SET public_config = jsonb_set(public_config, $1, $2::jsonb, true),
                schema_version = $3`,
@@ -181,7 +181,7 @@ class AppDomain {
         );
       } else {
         // If no specific transformation, just update the version
-        await (txClient || db).query('UPDATE clientes SET schema_version = $1', [targetVersion]);
+        await db.query('UPDATE clientes SET schema_version = $1', [targetVersion]);
       }
 
       return {
@@ -190,16 +190,13 @@ class AppDomain {
       };
     },
 
-    'client-delete': async function (user, payload, txClient = null) {
+    'client-delete': async function (user, payload) {
       const { clienteId } = payload;
 
       // Delete associated users first to avoid FK violation
-      await (txClient || db).query('DELETE FROM usuarios WHERE cliente_id = $1', [clienteId]);
+      await db.query('DELETE FROM usuarios WHERE cliente_id = $1', [clienteId]);
 
-      const result = await (txClient || db).query(
-        'DELETE FROM clientes WHERE id = $1 RETURNING id',
-        [clienteId]
-      );
+      const result = await db.query('DELETE FROM clientes WHERE id = $1 RETURNING id', [clienteId]);
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', message: 'Cliente eliminado' };
     },

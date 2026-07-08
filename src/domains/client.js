@@ -76,11 +76,10 @@ class ClientDomain {
   };
 
   static commands = {
-    'user-create': async function (user, payload, txClient = null) {
+    'user-create': async function (user, payload) {
       const { username, password, role_id, clienteId } = payload;
-      if (!username || !password || !clienteId) throw new EngineError('INVALID_PAYLOAD');
 
-      const result = await (txClient || db).query(
+      const result = await db.query(
         'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [username, password, role_id, `TOKEN_${Math.random().toString(36).substr(2, 9)}`, clienteId]
       );
@@ -88,9 +87,9 @@ class ClientDomain {
       return { status: 'success', usuario: result.rows[0] };
     },
 
-    'user-read': async function (user, payload, txClient = null) {
+    'user-read': async function (user, payload) {
       const { clienteId, userId } = payload;
-      const result = await (txClient || db).query(
+      const result = await db.query(
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1 AND (u.id::text = $2 OR u.username = $2)',
         [clienteId, userId]
       );
@@ -99,7 +98,7 @@ class ClientDomain {
       return { status: 'success', usuario: result.rows[0] };
     },
 
-    'user-update': async function (user, payload, txClient = null) {
+    'user-update': async function (user, payload) {
       const { clienteId, userId, data } = payload;
 
       const ALLOWED_FIELDS = ['password', 'role_id', 'username'];
@@ -114,7 +113,7 @@ class ClientDomain {
       const clienteParamIdx = values.length + 1;
       const userParamIdx = values.length + 2;
 
-      const result = await (txClient || db).query(
+      const result = await db.query(
         `UPDATE usuarios SET ${setClause} WHERE cliente_id = $${clienteParamIdx} AND (id::text = $${userParamIdx} OR username = $${userParamIdx}) RETURNING *`,
         finalParams
       );
@@ -123,7 +122,7 @@ class ClientDomain {
       return { status: 'success', usuario: result.rows[0] };
     },
 
-    'user-list': async function (user, payload, txClient = null) {
+    'user-list': async function (user, payload) {
       const { clienteId, filter, limit, offset } = payload;
       let query =
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1';
@@ -144,15 +143,14 @@ class ClientDomain {
         params.push(offset);
       }
 
-      const result = await (txClient || db).query(query, params);
+      const result = await db.query(query, params);
       return { status: 'success', usuarios: result.rows };
     },
 
-    'schema-extend': async function (user, payload, txClient = null) {
+    'schema-extend': async function (user, payload) {
       const { clienteId, newFields } = payload;
-      if (!clienteId || !newFields) throw new EngineError('INVALID_PAYLOAD');
 
-      const result = await (txClient || db).query(
+      const result = await db.query(
         'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
         [clienteId, JSON.stringify(newFields)]
       );

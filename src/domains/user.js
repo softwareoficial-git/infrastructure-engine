@@ -102,19 +102,18 @@ class UserDomain {
   }
 
   static commands = {
-    read: async function (user, payload, txClient = null) {
+    read: async function (user, payload) {
       const { clienteId } = payload;
-      const result = await (txClient || db).query(
-        'SELECT public_config FROM clientes WHERE id = $1',
-        [clienteId]
-      );
+      const result = await db.query('SELECT public_config FROM clientes WHERE id = $1', [
+        clienteId,
+      ]);
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', data: result.rows[0].public_config };
     },
 
-    write: async function (user, payload, txClient = null) {
+    write: async function (user, payload) {
       const { clienteId, data } = payload;
-      const result = await (txClient || db).query(
+      const result = await db.query(
         'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
         [clienteId, JSON.stringify(data)]
       );
@@ -122,23 +121,23 @@ class UserDomain {
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 
-    'read-path': async function (user, payload, txClient = null) {
+    'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
       const pgPath = UserDomain.parsePath(path);
-      const result = await (txClient || db).query(
-        'SELECT public_config #> $2 FROM clientes WHERE id = $1',
-        [clienteId, pgPath]
-      );
+      const result = await db.query('SELECT public_config #> $2 FROM clientes WHERE id = $1', [
+        clienteId,
+        pgPath,
+      ]);
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       const value = result.rows[0].values[0];
       if (value === null) throw new EngineError('PATH_NOT_FOUND');
       return { status: 'success', value };
     },
 
-    'update-path': async function (user, payload, txClient = null) {
+    'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
       const pgPath = UserDomain.parsePath(path);
-      const result = await (txClient || db).query(
+      const result = await db.query(
         'UPDATE clientes SET public_config = jsonb_set(public_config, $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config',
         [clienteId, pgPath, JSON.stringify(value)]
       );
@@ -146,13 +145,11 @@ class UserDomain {
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 
-    'push-item': async function (user, payload, txClient = null) {
-      const { clienteId, path, item } = { ...payload };
+    'push-item': async function (user, payload) {
+      const { clienteId, path, item } = payload;
       const pgPath = UserDomain.parsePath(path);
 
-      // Atomically append to the JSONB array using the || operator directly in SQL
-      // We use jsonb_set to target the specific path and concatenate the new item array
-      const result = await (txClient || db).query(
+      const result = await db.query(
         `UPDATE clientes
          SET public_config = jsonb_set(
            public_config,
@@ -169,11 +166,10 @@ class UserDomain {
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 
-    'query-json': async function (user, payload, txClient = null) {
+    'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
       const pgPath = UserDomain.parsePath(path);
 
-      // This uses a subquery to expand the array elements and then filters them
       let query = `
         SELECT item FROM (
           SELECT jsonb_array_elements(public_config #> $2) as item
@@ -193,7 +189,7 @@ class UserDomain {
         params.push(offset);
       }
 
-      const result = await (txClient || db).query(query, params);
+      const result = await db.query(query, params);
       return { status: 'success', results: result.rows.map((r) => r.item) };
     },
   };

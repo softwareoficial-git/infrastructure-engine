@@ -310,14 +310,14 @@ class SystemDomain {
       };
     },
 
-    'list-commands': async function (user, payload) {
+    'list-commands': async function () {
       return {
         status: 'success',
         commands: motor.listCommands(),
       };
     },
 
-    help: async function (user, payload) {
+    help: async function () {
       return {
         status: 'success',
         message: 'Welcome to the Infrastructure Engine Help!',
@@ -394,7 +394,7 @@ class SystemDomain {
       const result = await (txClient || db).query(query, params);
       return { status: 'success', events: result.rows };
     },
-    'events-stats': async function (user, payload, txClient = null) {
+    'events-stats': async function (user, payload) {
       const { tenantId, rangeDays = 7 } = payload;
 
       const query = `
@@ -407,7 +407,7 @@ class SystemDomain {
         WHERE tenant_id = $1 AND created_at >= CURRENT_DATE - interval '${rangeDays} days'
       `;
 
-      const result = await (txClient || db).query(query, [tenantId]);
+      const result = await db.query(query, [tenantId]);
       const stats = result.rows[0];
 
       const topErrorQuery = `
@@ -416,7 +416,7 @@ class SystemDomain {
         WHERE tenant_id = $1 AND status = 'ERROR'
         GROUP BY error_code ORDER BY count DESC LIMIT 1
       `;
-      const topErrorRes = await (txClient || db).query(topErrorQuery, [tenantId]);
+      const topErrorRes = await db.query(topErrorQuery, [tenantId]);
 
       return {
         status: 'success',
