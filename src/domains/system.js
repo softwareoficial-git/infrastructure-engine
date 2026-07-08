@@ -105,6 +105,11 @@ class SystemDomain {
       },
       required: ['tenantId', 'olderThanDays'],
     },
+    'clear-all': {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
     'events-global': {
       type: 'object',
       properties: {
@@ -163,6 +168,10 @@ class SystemDomain {
     },
     'events-archive': {
       description: 'Archives old events before deletion.',
+      errors: ['DB_ERROR'],
+    },
+    'clear-all': {
+      description: 'Wipes all system events across all tenants. Restricted to SUPER_ADMIN.',
       errors: ['DB_ERROR'],
     },
     'events-global': {
@@ -552,6 +561,11 @@ class SystemDomain {
       );
 
       return { status: 'success', archived_count: moveResult.rowCount };
+    },
+
+    'clear-all': async function (user, payload, txClient = null) {
+      await (txClient || db).query('TRUNCATE TABLE system_events');
+      return { status: 'success', message: 'All system events have been cleared.' };
     },
 
     'migrate-schema': async function (user, payload, txClient = null) {
