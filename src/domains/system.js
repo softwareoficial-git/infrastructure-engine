@@ -99,6 +99,14 @@ class SystemDomain {
       },
       required: ['tenantId', 'olderThanDays'],
     },
+    'events-global': {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', default: 100 },
+        offset: { type: 'integer', default: 0 },
+        role: { type: 'string' },
+      },
+    },
   };
 
   static docs = {
@@ -149,6 +157,11 @@ class SystemDomain {
     },
     'events-archive': {
       description: 'Archives old events before deletion.',
+      errors: ['DB_ERROR'],
+    },
+    'events-global': {
+      description:
+        'Retrieves all system events across all tenants, enriched with user roles and client names. Restricted to SUPER_ADMIN.',
       errors: ['DB_ERROR'],
     },
   };
@@ -531,6 +544,39 @@ class SystemDomain {
         from: currentVersion,
         to: targetVersion,
         message: 'Schema migration completed successfully',
+      };
+    },
+
+    'events-global': async function (user, payload, txClient = null) {
+      const { limit = 100, offset = 0, role } = payload;
+
+      let query = `
+        SELECT
+          e.*,
+          u.username as user_name,
+          r.nombre as role_name,
+          c.nombre as cliente_nombre
+        FROM system_events e
+        LEFT JOIN usuarios u ON e.user_id = u.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN clientes c ON e.tenant_id = c.id
+      `;
+
+      const params = [];
+      if (role) {
+        query += ` WHERE r.nombre = $1`;
+        params.push(role);
+      }
+
+      query += ` ORDER BY e.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit, offset);
+
+      const result = await (txClient || db).query(query, params);
+
+      return {
+        status: 'success',
+        total: result.rowCount,
+        events: result.rows,
       };
     },
   };
