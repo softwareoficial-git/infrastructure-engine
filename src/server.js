@@ -187,13 +187,17 @@ app.post('/execute', authenticate, async (req, res) => {
       };
       const user = req.user;
       const body = req.body || {};
+      const payload = body.payload || {};
       const tenantId =
-        user && user.role_name === 'SUPER_ADMIN'
-          ? 1
-          : user && typeof user.cliente_id === 'number'
-            ? user.cliente_id
-            : parseInt(body.tenantId) || 1;
-      const userId = user && typeof user.id === 'number' ? user.id : parseInt(body.userId) || null;
+        parseInt(body.tenantId) ||
+        parseInt(payload.tenantId) ||
+        parseInt(payload.clienteId) ||
+        (user && typeof user.cliente_id === 'number' ? user.cliente_id : null) ||
+        (user && user.role_name === 'SUPER_ADMIN' ? 1 : 1);
+      const userId =
+        user && typeof user.id === 'number'
+          ? user.id
+          : parseInt(body.userId) || parseInt(payload.userId) || null;
 
       await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
         tenantId,
