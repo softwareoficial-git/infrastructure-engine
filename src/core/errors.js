@@ -62,7 +62,7 @@ const ERROR_CATALOG = {
   INTERNAL_ERROR: {
     message: 'An unexpected internal error occurred.',
     solution:
-      'This is a system error. Please report it to the infrastructure team with the requestId.',
+      'This is a system error. Please report it to the infrastructure team providing the requestId and the x-app-id used in the request.',
   },
 };
 

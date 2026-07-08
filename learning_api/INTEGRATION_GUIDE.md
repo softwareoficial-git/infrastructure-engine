@@ -6,6 +6,10 @@ Este documento ha sido generado mediante **pruebas empíricas** sobre el servido
 ### 🛠️ Estándar de Petición
 Todas las llamadas deben ser `POST` al endpoint `/execute`.
 
+**Headers Obligatorios:**
+- `Content-Type: application/json`
+- `x-app-id: STRING` (Ej: `"ventas-web-v1"`, `"app-ios-prod"`) $\rightarrow$ **Crítico para soporte y auditoría.**
+
 **Formato Base:**
 ```json
 {
@@ -15,6 +19,20 @@ Todas las llamadas deben ser `POST` al endpoint `/execute`.
   "payload": { ... }
 }
 ```
+
+---
+
+### ⚙️ Telemetría y Trazabilidad (v4)
+Para reducir el tiempo de resolución de errores, el motor ahora captura automáticamente la procedencia de cada llamada.
+
+| Campo | Origen | Propósito |
+| :--- | :--- | :--- |
+| `app_id` | Header `x-app-id` | Identifica qué aplicación específica originó el comando. |
+| `ip_address` | Conexión TCP | Ubica la red desde la cual se realizó la petición. |
+| `user_agent` | Header `User-Agent` | Identifica el navegador o cliente (Chrome, iOS, Axios, etc.). |
+| `request_id` | Generado por Motor | Vincula el evento con los logs internos del servidor. |
+
+**💡 Recomendación:** Siempre envía un `x-app-id` único por cada aplicación. Si reportas un error al equipo de infraestructura, adjunta el `requestId` recibido en la respuesta para una localización instantánea del fallo.
 
 ---
 
