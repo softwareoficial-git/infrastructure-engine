@@ -16,6 +16,21 @@ const BASE_CONFIG_SCHEMA = {
 class AppDomain {
   static domain = 'APP';
 
+  static async _createClient(txClient, nombre) {
+    const dbClient = txClient || db;
+    const templateRes = await dbClient.query(
+      'SELECT contenido FROM plantillas WHERE es_oficial = true LIMIT 1'
+    );
+    if (templateRes.rows.length === 0) throw new EngineError('NO_OFFICIAL_TEMPLATE');
+    const officialContent = templateRes.rows[0].contenido;
+
+    const clientRes = await dbClient.query(
+      'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
+      [nombre, officialContent, JSON.stringify({ plan: 'free' })]
+    );
+    return clientRes.rows[0];
+  }
+
   static schemas = {
     'template-create': {
       type: 'object',
@@ -62,6 +77,13 @@ class AppDomain {
       },
       required: ['clienteId'],
     },
+    'init-business': {
+      type: 'object',
+      properties: {
+        clienteId: { type: 'integer' },
+      },
+      required: ['clienteId'],
+    },
     'self-register': {
       type: 'object',
       properties: {
@@ -94,6 +116,11 @@ class AppDomain {
     },
     'client-delete': {
       description: 'Deletes a client and all their users.',
+      errors: ['CLIENT_NOT_FOUND'],
+    },
+    'init-business': {
+      description:
+        'Initializes mandatory JSONB structures (stock, sales, employees) for a new business.',
       errors: ['CLIENT_NOT_FOUND'],
     },
     'self-register': {
@@ -149,20 +176,8 @@ class AppDomain {
 
     'client-create': async function (user, payload) {
       const { nombre } = payload;
-
-      const templateRes = await db.query(
-        'SELECT contenido FROM plantillas WHERE es_oficial = true LIMIT 1'
-      );
-      if (templateRes.rows.length === 0) throw new EngineError('NO_OFFICIAL_TEMPLATE');
-
-      const officialContent = templateRes.rows[0].contenido;
-
-      const clientRes = await db.query(
-        'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
-        [nombre, officialContent, JSON.stringify({ plan: 'free' })]
-      );
-
-      return { status: 'success', cliente: clientRes.rows[0] };
+      const cliente = await AppDomain._createClient(null, nombre);
+      return { status: 'success', cliente };
     },
 
     'update-client-plan': async function (user, payload) {
@@ -203,14 +218,30 @@ class AppDomain {
       };
     },
 
-    'client-delete': async function (user, payload) {
+    'init-business': async function (user, payload) {
       const { clienteId } = payload;
-      // Delete associated users first to avoid FK violation
-      await db.query('DELETE FROM usuarios WHERE cliente_id = $1', [clienteId]);
 
-      const result = await db.query('DELETE FROM clientes WHERE id = $1 RETURNING id', [clienteId]);
+      const initialStructure = {
+        stock: [],
+        sales: [],
+        employees: [],
+      };
+
+      const result = await db.query(
+        `UPDATE clientes
+         SET public_config = public_config || $2::jsonb
+         WHERE id = $1
+         RETURNING public_config`,
+        [clienteId, JSON.stringify(initialStructure)]
+      );
+
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
-      return { status: 'success', message: 'Cliente eliminado' };
+
+      return {
+        status: 'success',
+        message: 'Business structure initialized successfully',
+        config: result.rows[0].public_config,
+      };
     },
 
     'self-register': async function (user, payload) {
@@ -227,18 +258,16 @@ class AppDomain {
       try {
         await client.query('BEGIN');
 
-        // 2. Create Client (Logic mirrored from client-create)
-        const templateRes = await client.query(
-          'SELECT contenido FROM plantillas WHERE es_oficial = true LIMIT 1'
-        );
-        if (templateRes.rows.length === 0) throw new EngineError('NO_OFFICIAL_TEMPLATE');
-        const officialContent = templateRes.rows[0].contenido;
+        // 2. Create Client
+        const newCliente = await AppDomain._createClient(client, nombreCliente);
 
-        const clientRes = await client.query(
-          'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
-          [nombreCliente, officialContent, JSON.stringify({ plan: 'free' })]
+        // 2.1. Automatic Business Initialization (Prevent Blank Slate Problem)
+        await client.query(
+          `UPDATE clientes
+           SET public_config = public_config || '{"stock": [], "sales": [], "employees": []}'::jsonb
+           WHERE id = $1`,
+          [newCliente.id]
         );
-        const newCliente = clientRes.rows[0];
 
         // 3. Find the 'CLIENTE' role ID
         const roleRes = await client.query("SELECT id FROM roles WHERE nombre = 'CLIENTE'");
