@@ -43,7 +43,7 @@ class SystemDomain {
     'events-list': {
       type: 'object',
       properties: {
-        tenantId: { type: 'integer' },
+        tenantId: { type: ['integer', 'null'] },
         userId: { type: 'integer' },
         startDate: { type: 'string', format: 'date-time' },
         endDate: { type: 'string', format: 'date-time' },
