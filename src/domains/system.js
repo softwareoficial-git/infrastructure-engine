@@ -579,6 +579,85 @@ class SystemDomain {
         events: result.rows,
       };
     },
+
+    'users-global-list': async function (user, payload, txClient = null) {
+      const { limit = 100, offset = 0 } = payload;
+
+      const query = `
+        SELECT
+          u.id,
+          u.username,
+          u.token,
+          u.cliente_id,
+          r.nombre as role_name,
+          c.nombre as cliente_nombre,
+          c.schema_version
+        FROM usuarios u
+        JOIN roles r ON u.role_id = r.id
+        LEFT JOIN clientes c ON u.cliente_id = c.id
+        ORDER BY r.id ASC, u.username ASC
+        LIMIT $1 OFFSET $2
+      `;
+
+      const result = await (txClient || db).query(query, [limit, offset]);
+
+      return {
+        status: 'success',
+        total: result.rowCount,
+        users: result.rows,
+      };
+    },
+
+    'user-audit': async function (user, payload, txClient = null) {
+      const { userId, limit = 50, offset = 0 } = payload;
+
+      const query = `
+        SELECT
+          e.*,
+          c.nombre as cliente_nombre,
+          r.nombre as role_name
+        FROM system_events e
+        LEFT JOIN clientes c ON e.tenant_id = c.id
+        LEFT JOIN usuarios u ON e.user_id = u.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE e.user_id = $1
+        ORDER BY e.created_at DESC
+        LIMIT $2 OFFSET $3
+      `;
+
+      const result = await (txClient || db).query(query, [userId, limit, offset]);
+
+      return {
+        status: 'success',
+        total: result.rowCount,
+        timeline: result.rows,
+      };
+    },
+
+    'tenant-audit': async function (user, payload, txClient = null) {
+      const { tenantId, limit = 50, offset = 0 } = payload;
+
+      const query = `
+        SELECT
+          e.*,
+          u.username as user_name,
+          r.nombre as role_name
+        FROM system_events e
+        LEFT JOIN usuarios u ON e.user_id = u.id
+        LEFT JOIN roles r ON u.role_id = r.id
+        WHERE e.tenant_id = $1
+        ORDER BY e.created_at DESC
+        LIMIT $2 OFFSET $3
+      `;
+
+      const result = await (txClient || db).query(query, [tenantId, limit, offset]);
+
+      return {
+        status: 'success',
+        total: result.rowCount,
+        timeline: result.rows,
+      };
+    },
   };
 }
 
