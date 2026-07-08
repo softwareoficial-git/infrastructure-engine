@@ -108,7 +108,7 @@ class UserDomain {
         'SELECT public_config FROM clientes WHERE id = $1',
         [clienteId]
       );
-      if (result.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', data: result.rows[0].public_config };
     },
 
@@ -118,6 +118,7 @@ class UserDomain {
         'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
         [clienteId, JSON.stringify(data)]
       );
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 
@@ -128,9 +129,9 @@ class UserDomain {
         'SELECT public_config #> $2 FROM clientes WHERE id = $1',
         [clienteId, pgPath]
       );
-      if (result.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       const value = result.rows[0].values[0];
-      if (value === null) throw new Error('PATH_NOT_FOUND: La ruta especificada no existe');
+      if (value === null) throw new EngineError('PATH_NOT_FOUND');
       return { status: 'success', value };
     },
 
@@ -141,7 +142,7 @@ class UserDomain {
         'UPDATE clientes SET public_config = jsonb_set(public_config, $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config',
         [clienteId, pgPath, JSON.stringify(value)]
       );
-      if (result.rows.length === 0) throw new Error('CLIENT_NOT_FOUND: Cliente no encontrado');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 

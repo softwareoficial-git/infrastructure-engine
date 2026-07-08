@@ -21,8 +21,13 @@ const requestLogger = (req, res, next) => {
     const { command } = req.body || {};
     const user = req.user ? req.user.username : 'Unauthenticated';
 
+    let errorInfo = '';
+    if (res.statusCode >= 400) {
+      errorInfo = ` | Code: ${res.errorCode || 'UNKNOWN_ERROR'}`;
+    }
+
     console.log(
-      `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${user} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode} | ${duration}ms`
+      `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${user} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode}${errorInfo} | ${duration}ms`
     );
   });
   next();
@@ -129,6 +134,8 @@ app.post('/execute', authenticate, async (req, res) => {
     } else {
       statusCode = 500;
     }
+
+    res.errorCode = code; // Attach error code for the logger
 
     return sendResponse(
       res,
