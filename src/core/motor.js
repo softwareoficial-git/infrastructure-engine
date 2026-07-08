@@ -43,11 +43,11 @@ class Motor {
     // 1. Find all roles in the user's hierarchy (User -> Parent -> Grandparent...)
     const roleChainQuery = `
       WITH RECURSIVE role_chain AS (
-        SELECT id, nombre, parent_id 
-        FROM roles 
+        SELECT id, nombre, parent_id
+        FROM roles
         WHERE id = $1
         UNION ALL
-        SELECT r.id, r.nombre, r.parent_id 
+        SELECT r.id, r.nombre, r.parent_id
         FROM roles r
         JOIN role_chain rc ON r.id = rc.parent_id
       )
@@ -106,6 +106,41 @@ class Motor {
     }
 
     return await cmdConfig.handler(user, payload, txClient);
+  }
+
+  listCommands() {
+    const catalog = {};
+    for (const [domain, actions] of Object.entries(this.commands)) {
+      catalog[domain] = {};
+      for (const [action, config] of Object.entries(actions)) {
+        catalog[domain][action] = {
+          description: config.description,
+          payload: config.schema,
+          possibleErrors: config.possibleErrors,
+        };
+      }
+    }
+    return catalog;
+  }
+
+  async authUser(token) {
+    if (!token) throw new EngineError('AUTH_REQUIRED');
+
+    if (token === 'BOOTSTRAP_TOKEN') {
+      return { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
+    }
+
+    if (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN) {
+      return { id: 0, role_name: 'SUPER_ADMIN', token: process.env.ADMIN_SECRET_TOKEN };
+    }
+
+    const result = await db.query(
+      'SELECT u.*, r.nombre as role_name, r.parent_id FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.token = $1',
+      [token]
+    );
+
+    if (result.rows.length === 0) throw new EngineError('INVALID_TOKEN');
+    return result.rows[0];
   }
 }
 

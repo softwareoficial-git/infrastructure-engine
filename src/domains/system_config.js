@@ -1,5 +1,6 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
+const { EngineError } = require('../core/errors');
 
 class SystemConfigDomain {
   static domain = 'SYSTEM';

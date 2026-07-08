@@ -1,5 +1,6 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
+const { EngineError } = require('../core/errors');
 
 class UserDomain {
   static domain = 'USER';
@@ -151,14 +152,14 @@ class UserDomain {
       // Atomically append to the JSONB array using the || operator directly in SQL
       // We use jsonb_set to target the specific path and concatenate the new item array
       const result = await (txClient || db).query(
-        `UPDATE clientes 
+        `UPDATE clientes
          SET public_config = jsonb_set(
-           public_config, 
-           $2, 
-           (public_config #> $2) || $3::jsonb, 
+           public_config,
+           $2,
+           (public_config #> $2) || $3::jsonb,
            true
-         ) 
-         WHERE id = $1 
+         )
+         WHERE id = $1
          RETURNING public_config`,
         [clienteId, pgPath, JSON.stringify([item])]
       );

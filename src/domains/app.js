@@ -1,7 +1,6 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
-const Ajv = require('ajv');
-const ajv = new Ajv();
+const { EngineError } = require('../core/errors');
 
 // --- SCHEMAS ---
 const BASE_CONFIG_SCHEMA = {
@@ -175,8 +174,8 @@ class AppDomain {
       if (transformation.add_field) {
         // Perform a bulk update using jsonb_set for all clients in a single query
         await (txClient || db).query(
-          `UPDATE clientes 
-           SET public_config = jsonb_set(public_config, $1, $2::jsonb, true), 
+          `UPDATE clientes
+           SET public_config = jsonb_set(public_config, $1, $2::jsonb, true),
                schema_version = $3`,
           [`{${transformation.add_field}}`, JSON.stringify(transformation.default), targetVersion]
         );

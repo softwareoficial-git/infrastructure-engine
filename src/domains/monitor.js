@@ -1,5 +1,6 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
+const { EngineError } = require('../core/errors');
 
 class MonitorDomain {
   static domain = 'MONITOR';
@@ -125,11 +126,11 @@ class MonitorDomain {
 
       // 3. Inventory Analysis (Optimized: Moved calculation to SQL)
       const inventoryRes = await (txClient || db).query(
-        `SELECT 
+        `SELECT
           count(item) as total_products,
           sum((public_config->'precios'->>(item->>'id'))::numeric * (item->>'qty')::numeric) as total_value
-         FROM clientes, 
-         jsonb_array_elements(public_config->'stock') as item 
+         FROM clientes,
+         jsonb_array_elements(public_config->'stock') as item
          WHERE id = $1`,
         [clienteId]
       );

@@ -18,7 +18,7 @@ const requestLogger = (req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const { command, token } = req.body || {};
+    const { command } = req.body || {};
     const user = req.user ? req.user.username : 'Unauthenticated';
 
     console.log(
@@ -126,7 +126,6 @@ app.post('/execute', authenticate, async (req, res) => {
       if (code === 'FORBIDDEN') statusCode = 403;
       else if (code === 'CMD_NOT_FOUND') statusCode = 404;
       else if (code === 'INVALID_TOKEN' || code === 'AUTH_REQUIRED') statusCode = 401;
-      else statusCode = 400;
     } else {
       statusCode = 500;
     }
