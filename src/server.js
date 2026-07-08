@@ -206,12 +206,14 @@ app.post('/execute', authenticate, async (req, res) => {
         status,
         errorCode,
         source: 'BACKEND',
+        ip_address: req.ip,
+        user_agent: req.headers['user-agent'],
+        app_id: req.headers['x-app-id'] || 'unknown-app',
+        request_id: requestId,
         payload: {
           duration: Date.now() - start,
-          requestId,
           url: req.url,
           method: req.method,
-          ip: req.ip,
         },
       });
     } catch (e) {

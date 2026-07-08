@@ -32,6 +32,10 @@ class SystemDomain {
         status: { type: 'string', enum: ['SUCCESS', 'ERROR'] },
         errorCode: { type: 'string' },
         source: { type: 'string', enum: ['FRONTEND', 'BACKEND', 'CLIENT_APP'] },
+        ip_address: { type: 'string' },
+        user_agent: { type: 'string' },
+        app_id: { type: 'string' },
+        request_id: { type: 'string' },
         payload: { type: 'object' },
       },
       required: ['tenantId', 'status', 'source'],
@@ -55,6 +59,8 @@ class SystemDomain {
         source: { type: 'string' },
         command: { type: 'string' },
         status: { type: 'string' },
+        app_id: { type: 'string' },
+        ip_address: { type: 'string' },
         searchTerm: { type: 'string' },
       },
       required: ['tenantId'],
@@ -257,6 +263,10 @@ class SystemDomain {
           status VARCHAR(20),
           error_code VARCHAR(50),
           source VARCHAR(50),
+          ip_address VARCHAR(45),
+          user_agent TEXT,
+          app_id VARCHAR(100),
+          request_id VARCHAR(100),
           payload JSONB DEFAULT '{}',
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
@@ -340,12 +350,39 @@ class SystemDomain {
     },
 
     'log-event': async function (user, payload, txClient = null) {
-      const { tenantId, userId, command, status, errorCode, source, payload: eventData } = payload;
+      const {
+        tenantId,
+        userId,
+        command,
+        status,
+        errorCode,
+        source,
+        ip_address,
+        user_agent,
+        app_id,
+        request_id,
+        payload: eventData,
+      } = payload;
 
       await (txClient || db).query(
-        `INSERT INTO system_events (tenant_id, user_id, command, status, error_code, source, payload)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [tenantId, userId, command, status, errorCode, source, eventData || {}]
+        `INSERT INTO system_events (
+          tenant_id, user_id, command, status, error_code, source,
+          ip_address, user_agent, app_id, request_id, payload
+        )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          tenantId,
+          userId,
+          command,
+          status,
+          errorCode,
+          source,
+          ip_address,
+          user_agent,
+          app_id,
+          request_id,
+          eventData || {},
+        ]
       );
 
       return { status: 'success', message: 'Evento registrado' };
@@ -379,7 +416,7 @@ class SystemDomain {
     },
 
     'events-filter': async function (user, payload, txClient = null) {
-      const { tenantId, source, command, status, searchTerm } = payload;
+      const { tenantId, source, command, status, app_id, ip_address, searchTerm } = payload;
 
       let query = 'SELECT * FROM system_events WHERE tenant_id = $1';
       const params = [tenantId];
@@ -396,6 +433,14 @@ class SystemDomain {
       if (status) {
         query += ` AND status = $${paramIdx++}`;
         params.push(status);
+      }
+      if (app_id) {
+        query += ` AND app_id = $${paramIdx++}`;
+        params.push(app_id);
+      }
+      if (ip_address) {
+        query += ` AND ip_address = $${paramIdx++}`;
+        params.push(ip_address);
       }
       if (searchTerm) {
         query += ` AND (command ILIKE $${paramIdx} OR error_code ILIKE $${paramIdx + 1} OR payload::text ILIKE $${paramIdx + 2})`;
@@ -539,6 +584,19 @@ class SystemDomain {
         console.log('✅ Migration v3 completed.');
       }
 
+      if (currentVersion < 4 && targetVersion >= 4) {
+        console.log('Applying Migration v4: Adding traceability columns to system_events...');
+        await client.query(`
+          ALTER TABLE system_events
+          ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45),
+          ADD COLUMN IF NOT EXISTS user_agent TEXT,
+          ADD COLUMN IF NOT EXISTS app_id VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS request_id VARCHAR(100);
+        `);
+        await client.query('UPDATE clientes SET schema_version = 4');
+        console.log('✅ Migration v4 completed.');
+      }
+
       return {
         status: 'success',
         from: currentVersion,
@@ -651,7 +709,6 @@ class SystemDomain {
       `;
 
       const result = await (txClient || db).query(query, [tenantId, limit, offset]);
-
       return {
         status: 'success',
         total: result.rowCount,
