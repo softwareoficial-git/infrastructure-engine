@@ -124,12 +124,12 @@ class UserDomain {
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
       const pgPath = UserDomain.parsePath(path);
-      const result = await db.query('SELECT public_config #> $2 FROM clientes WHERE id = $1', [
-        clienteId,
-        pgPath,
-      ]);
+      const result = await db.query(
+        'SELECT public_config #> $2 as value FROM clientes WHERE id = $1',
+        [clienteId, pgPath]
+      );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
-      const value = result.rows[0].values[0];
+      const value = result.rows[0].value;
       if (value === null) throw new EngineError('PATH_NOT_FOUND');
       return { status: 'success', value };
     },
