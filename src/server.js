@@ -31,49 +31,6 @@ const requestLogger = (req, res, next) => {
     console.log(
       `[${new Date().toISOString()}] ${req.method} ${req.url} | User: ${username} | Cmd: ${command || 'N/A'} | Status: ${res.statusCode}${errorInfo} | ${duration}ms`
     );
-
-    // AUTOMATIC EVENT LOGGING
-    // Prevent recursive logging of the log-event command itself
-    if (command === 'SYSTEM:log-event') return;
-
-    try {
-      const bootstrapUser = {
-        id: 0,
-        role_name: 'SUPER_ADMIN',
-        role_id: 1,
-        token: 'BOOTSTRAP_TOKEN',
-      };
-
-      // Ensure IDs are integers or null and handle cases where user exists but lacks a cliente_id (e.g. admin)
-      const tenantId =
-        user && user.role_name === 'SUPER_ADMIN'
-          ? 1
-          : user && typeof user.cliente_id === 'number'
-            ? user.cliente_id
-            : parseInt(body.tenantId) || 1;
-      const userId = user && typeof user.id === 'number' ? user.id : parseInt(body.userId) || null;
-
-      await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
-        tenantId: tenantId,
-        userId: userId,
-        command: command || 'N/A',
-        status: res.statusCode >= 400 ? 'ERROR' : 'SUCCESS',
-        errorCode: res.errorCode || null,
-        source: 'BACKEND',
-        payload: {
-          duration,
-          requestId: req.requestId,
-          url: req.url,
-          method: req.method,
-          ip: req.ip,
-        },
-      });
-    } catch (logError) {
-      // Silent failure for background logging to avoid polluting logs further
-      if (process.env.NODE_ENV !== 'production') {
-        console.error(`❌ Internal Event Logging Error: ${logError.message}`);
-      }
-    }
   });
   next();
 };
@@ -145,6 +102,7 @@ const authenticate = async (req, res, next) => {
  * This is the stable bridge for developers to build business logic on top.
  */
 app.post('/execute', authenticate, async (req, res) => {
+  const start = Date.now();
   const { command, payload } = req.body;
   const requestId = req.requestId;
 
@@ -159,8 +117,49 @@ app.post('/execute', authenticate, async (req, res) => {
     );
   }
 
+  // Helper for background logging to avoid repetition
+  const logAutomaticEvent = async (status, errorCode = null) => {
+    if (command === 'SYSTEM:log-event') return;
+    try {
+      const bootstrapUser = {
+        id: 0,
+        role_name: 'SUPER_ADMIN',
+        role_id: 1,
+        token: 'BOOTSTRAP_TOKEN',
+      };
+      const user = req.user;
+      const body = req.body || {};
+      const tenantId =
+        user && user.role_name === 'SUPER_ADMIN'
+          ? 1
+          : user && typeof user.cliente_id === 'number'
+            ? user.cliente_id
+            : parseInt(body.tenantId) || 1;
+      const userId = user && typeof user.id === 'number' ? user.id : parseInt(body.userId) || null;
+
+      await motor.execute(bootstrapUser, 'SYSTEM:log-event', {
+        tenantId,
+        userId,
+        command: command || 'N/A',
+        status,
+        errorCode,
+        source: 'BACKEND',
+        payload: {
+          duration: Date.now() - start,
+          requestId,
+          url: req.url,
+          method: req.method,
+          ip: req.ip,
+        },
+      });
+    } catch (e) {
+      if (process.env.NODE_ENV !== 'production') console.error(`❌ Event Log Error: ${e.message}`);
+    }
+  };
+
   try {
     const result = await motor.execute(req.user, command, payload || {});
+    await logAutomaticEvent('SUCCESS');
     return sendResponse(res, 200, 'success', result, null, requestId);
   } catch (error) {
     let statusCode = 400;
@@ -181,6 +180,7 @@ app.post('/execute', authenticate, async (req, res) => {
     }
 
     res.errorCode = code; // Attach error code for the logger
+    await logAutomaticEvent('ERROR', code);
 
     return sendResponse(
       res,

@@ -310,14 +310,14 @@ class SystemDomain {
       };
     },
 
-    'list-commands': async function (user, payload, txClient = null) {
+    'list-commands': async function (user, payload) {
       return {
         status: 'success',
         commands: motor.listCommands(),
       };
     },
 
-    help: async function (user, payload, txClient = null) {
+    help: async function (user, payload) {
       return {
         status: 'success',
         message: 'Welcome to the Infrastructure Engine Help!',
