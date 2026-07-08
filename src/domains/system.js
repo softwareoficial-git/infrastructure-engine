@@ -584,17 +584,15 @@ class SystemDomain {
         console.log('✅ Migration v3 completed.');
       }
 
-      if (currentVersion < 4 && targetVersion >= 4) {
-        console.log('Applying Migration v4: Adding traceability columns to system_events...');
+      if (currentVersion < 5 && targetVersion >= 5) {
+        console.log('Applying Migration v5: Enforcing NOT NULL on public_config...');
         await client.query(`
-          ALTER TABLE system_events
-          ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45),
-          ADD COLUMN IF NOT EXISTS user_agent TEXT,
-          ADD COLUMN IF NOT EXISTS app_id VARCHAR(100),
-          ADD COLUMN IF NOT EXISTS request_id VARCHAR(100);
+          UPDATE clientes SET public_config = '{}' WHERE public_config IS NULL;
+          ALTER TABLE clientes ALTER COLUMN public_config SET DEFAULT '{}'::jsonb;
+          ALTER TABLE clientes ALTER COLUMN public_config SET NOT NULL;
         `);
-        await client.query('UPDATE clientes SET schema_version = 4');
-        console.log('✅ Migration v4 completed.');
+        await client.query('UPDATE clientes SET schema_version = 5');
+        console.log('✅ Migration v5 completed.');
       }
 
       return {
