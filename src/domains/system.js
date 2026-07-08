@@ -23,6 +23,82 @@ class SystemDomain {
       },
       required: ['commands'],
     },
+    'log-event': {
+      type: 'object',
+      properties: {
+        tenantId: { type: 'integer' },
+        userId: { type: 'integer' },
+        command: { type: 'string' },
+        status: { type: 'string', enum: ['SUCCESS', 'ERROR'] },
+        errorCode: { type: 'string' },
+        source: { type: 'string', enum: ['FRONTEND', 'BACKEND', 'CLIENT_APP'] },
+        payload: { type: 'object' },
+      },
+      required: ['tenantId', 'status', 'source'],
+    },
+    'events-list': {
+      type: 'object',
+      properties: {
+        tenantId: { type: 'integer' },
+        userId: { type: 'integer' },
+        startDate: { type: 'string', format: 'date-time' },
+        endDate: { type: 'string', format: 'date-time' },
+        limit: { type: 'integer', default: 50 },
+        offset: { type: 'integer', default: 0 },
+      },
+      required: ['tenantId'],
+    },
+    'events-filter': {
+      type: 'object',
+      properties: {
+        tenantId: { type: 'integer' },
+        source: { type: 'string' },
+        command: { type: 'string' },
+        status: { type: 'string' },
+        searchTerm: { type: 'string' },
+      },
+      required: ['tenantId'],
+    },
+    'events-stats': {
+      type: 'object',
+      properties: {
+        tenantId: { type: 'integer' },
+        rangeDays: { type: 'integer', default: 7 },
+      },
+      required: ['tenantId'],
+    },
+    'events-top-errors': {
+      type: 'object',
+      properties: {
+        tenantId: { type: 'integer' },
+        limit: { type: 'integer', default: 5 },
+      },
+      required: ['tenantId'],
+    },
+    'events-user-activity': {
+      type: 'object',
+      properties: {
+        userId: { type: 'integer' },
+        limit: { type: 'integer', default: 10 },
+      },
+      required: ['userId'],
+    },
+    'events-clear': {
+      type: 'object',
+      properties: {
+        tenantId: { type: 'integer' },
+        olderThanDays: { type: 'integer' },
+      },
+      required: ['tenantId', 'olderThanDays'],
+    },
+    'events-archive': {
+      type: 'object',
+      properties: {
+        tenantId: { type: 'integer' },
+        olderThanDays: { type: 'integer' },
+      },
+      required: ['tenantId', 'olderThanDays'],
+    },
   };
 
   static docs = {
@@ -42,6 +118,38 @@ class SystemDomain {
     help: {
       description: 'Provides general usage instructions for the engine.',
       errors: [],
+    },
+    'log-event': {
+      description: 'Records a system event from any source (Frontend, Backend, Client).',
+      errors: ['DB_ERROR'],
+    },
+    'events-list': {
+      description: 'Retrieves the raw event history with basic filtering.',
+      errors: ['DB_ERROR'],
+    },
+    'events-filter': {
+      description: 'Advanced filtering of events by technical attributes.',
+      errors: ['DB_ERROR'],
+    },
+    'events-stats': {
+      description: 'Generates statistical health summary for a tenant.',
+      errors: ['DB_ERROR'],
+    },
+    'events-top-errors': {
+      description: 'Lists the most frequent error codes for a tenant.',
+      errors: ['DB_ERROR'],
+    },
+    'events-user-activity': {
+      description: 'Analyzes the behavior and most used commands of a specific user.',
+      errors: ['DB_ERROR'],
+    },
+    'events-clear': {
+      description: 'Deletes old events to maintain performance.',
+      errors: ['DB_ERROR'],
+    },
+    'events-archive': {
+      description: 'Archives old events before deletion.',
+      errors: ['DB_ERROR'],
     },
   };
 
@@ -127,6 +235,27 @@ class SystemDomain {
         );
       `);
 
+      await (txClient || db).query(`
+        CREATE TABLE IF NOT EXISTS system_events (
+          id SERIAL PRIMARY KEY,
+          tenant_id INTEGER,
+          user_id INTEGER,
+          command VARCHAR(100),
+          status VARCHAR(20),
+          error_code VARCHAR(50),
+          source VARCHAR(50),
+          payload JSONB DEFAULT '{}',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await (txClient || db).query(`
+        CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id);
+        CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);
+        CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);
+      `);
+
       // Indexación para alto volumen de datos en JSONB
       // Usamos GIN con jsonb_path_ops para búsquedas rápidas de productos/claves
       await (txClient || db).query(`
@@ -195,6 +324,169 @@ class SystemDomain {
         instructions:
           'Use the format DOMAIN:action. For a full list of commands, use SYSTEM:list-commands.',
       };
+    },
+
+    'log-event': async function (user, payload, txClient = null) {
+      const { tenantId, userId, command, status, errorCode, source, payload: eventData } = payload;
+
+      await (txClient || db).query(
+        `INSERT INTO system_events (tenant_id, user_id, command, status, error_code, source, payload)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [tenantId, userId, command, status, errorCode, source, eventData || {}]
+      );
+
+      return { status: 'success', message: 'Evento registrado' };
+    },
+
+    'events-list': async function (user, payload, txClient = null) {
+      const { tenantId, userId, startDate, endDate, limit = 50, offset = 0 } = payload;
+
+      let query = 'SELECT * FROM system_events WHERE tenant_id = $1';
+      const params = [tenantId];
+      let paramIdx = 2;
+
+      if (userId) {
+        query += ` AND user_id = $${paramIdx++}`;
+        params.push(userId);
+      }
+      if (startDate) {
+        query += ` AND created_at >= $${paramIdx++}`;
+        params.push(startDate);
+      }
+      if (endDate) {
+        query += ` AND created_at <= $${paramIdx++}`;
+        params.push(endDate);
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+      params.push(limit, offset);
+
+      const result = await (txClient || db).query(query, params);
+      return { status: 'success', events: result.rows };
+    },
+
+    'events-filter': async function (user, payload, txClient = null) {
+      const { tenantId, source, command, status, searchTerm } = payload;
+
+      let query = 'SELECT * FROM system_events WHERE tenant_id = $1';
+      const params = [tenantId];
+      let paramIdx = 2;
+
+      if (source) {
+        query += ` AND source = $${paramIdx++}`;
+        params.push(source);
+      }
+      if (command) {
+        query += ` AND command = $${paramIdx++}`;
+        params.push(command);
+      }
+      if (status) {
+        query += ` AND status = $${paramIdx++}`;
+        params.push(status);
+      }
+      if (searchTerm) {
+        query += ` AND (command ILIKE $${paramIdx} OR error_code ILIKE $${paramIdx + 1} OR payload::text ILIKE $${paramIdx + 2})`;
+        params.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT 100`;
+
+      const result = await (txClient || db).query(query, params);
+      return { status: 'success', events: result.rows };
+    },
+    'events-stats': async function (user, payload, txClient = null) {
+      const { tenantId, rangeDays = 7 } = payload;
+
+      const query = `
+        SELECT
+          count(*) as total_requests,
+          count(*) FILTER (WHERE status = 'SUCCESS') as success_count,
+          count(*) FILTER (WHERE status = 'ERROR') as error_count,
+          (count(*) FILTER (WHERE status = 'SUCCESS') * 100.0 / NULLIF(count(*), 0)) as success_rate
+        FROM system_events
+        WHERE tenant_id = $1 AND created_at >= CURRENT_DATE - interval '${rangeDays} days'
+      `;
+
+      const result = await (txClient || db).query(query, [tenantId]);
+      const stats = result.rows[0];
+
+      const topErrorQuery = `
+        SELECT error_code, count(*) as count
+        FROM system_events
+        WHERE tenant_id = $1 AND status = 'ERROR'
+        GROUP BY error_code ORDER BY count DESC LIMIT 1
+      `;
+      const topErrorRes = await (txClient || db).query(topErrorQuery, [tenantId]);
+
+      return {
+        status: 'success',
+        stats: {
+          ...stats,
+          most_frequent_error: topErrorRes.rows[0] || null,
+        },
+      };
+    },
+
+    'events-top-errors': async function (user, payload, txClient = null) {
+      const { tenantId, limit = 5 } = payload;
+
+      const query = `
+        SELECT error_code, count(*) as count
+        FROM system_events
+        WHERE tenant_id = $1 AND status = 'ERROR'
+        GROUP BY error_code ORDER BY count DESC LIMIT $2
+      `;
+
+      const result = await (txClient || db).query(query, [tenantId, limit]);
+      return { status: 'success', top_errors: result.rows };
+    },
+
+    'events-user-activity': async function (user, payload, txClient = null) {
+      const { userId, limit = 10 } = payload;
+
+      const query = `
+        SELECT command, count(*) as usage_count
+        FROM system_events
+        WHERE user_id = $1
+        GROUP BY command ORDER BY usage_count DESC LIMIT $2
+      `;
+
+      const result = await (txClient || db).query(query, [userId, limit]);
+      return { status: 'success', activity: result.rows };
+    },
+
+    'events-clear': async function (user, payload, txClient = null) {
+      const { tenantId, olderThanDays } = payload;
+
+      const result = await (txClient || db).query(
+        `DELETE FROM system_events
+         WHERE tenant_id = $1 AND created_at < CURRENT_DATE - interval '${olderThanDays} days'`,
+        [tenantId]
+      );
+
+      return { status: 'success', deleted_count: result.rowCount };
+    },
+
+    'events-archive': async function (user, payload, txClient = null) {
+      const { tenantId, olderThanDays } = payload;
+
+      await (txClient || db).query(`
+        CREATE TABLE IF NOT EXISTS system_events_archive (LIKE system_events INCLUDING ALL)
+      `);
+
+      const moveResult = await (txClient || db).query(
+        `
+        WITH moved_rows AS (
+          DELETE FROM system_events
+          WHERE tenant_id = $1 AND created_at < CURRENT_DATE - interval '${olderThanDays} days'
+          RETURNING *
+        )
+        INSERT INTO system_events_archive SELECT * FROM moved_rows
+      `,
+        [tenantId]
+      );
+
+      return { status: 'success', archived_count: moveResult.rowCount };
     },
   };
 }
