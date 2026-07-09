@@ -111,6 +111,20 @@ class Motor {
 
     await this.authorize(user, domain);
 
+    // --- MANDATORY TENANT ISOLATION (IDOR FIX) ---
+    const tenantScopedDomains = ['CLIENT', 'USER', 'MONITOR'];
+    if (tenantScopedDomains.includes(domain) && user.role_name !== 'SUPER_ADMIN') {
+      const requestedTenantId = payload.clienteId || payload.tenantId;
+      if (requestedTenantId !== undefined && requestedTenantId !== null) {
+        if (Number(user.cliente_id) !== Number(requestedTenantId)) {
+          throw new EngineError(
+            'FORBIDDEN',
+            'Tenant mismatch: You cannot access data from another client.'
+          );
+        }
+      }
+    }
+
     if (cmdConfig.schema) {
       const validate = ajv.compile(cmdConfig.schema);
       const valid = validate(payload);
