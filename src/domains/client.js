@@ -89,6 +89,11 @@ class ClientDomain {
         }
       }
 
+      // IDOR Check: User must belong to the client they are creating users for (unless SUPER_ADMIN)
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', 'You cannot create users for another client.');
+      }
+
       // 2. Resolve RoleId from role name if missing
       if (!role_id && role) {
         const roleRes = await db.query('SELECT id FROM roles WHERE nombre = $1', [
@@ -102,6 +107,13 @@ class ClientDomain {
 
       if (!role_id) {
         throw new EngineError('INVALID_PAYLOAD', 'Either role_id or role must be provided.');
+      }
+
+      // RBAC: Prevent Privilege Escalation. Only SUPER_ADMIN can assign roles other than 'USUARIO'.
+      const roleCheck = await db.query('SELECT nombre FROM roles WHERE id = $1', [role_id]);
+      const assignedRoleName = roleCheck.rows[0]?.nombre;
+      if (assignedRoleName !== 'USUARIO' && user.role_name !== 'SUPER_ADMIN') {
+        throw new EngineError('FORBIDDEN', 'Only system administrators can assign elevated roles.');
       }
 
       try {
@@ -130,6 +142,12 @@ class ClientDomain {
 
     'user-read': async function (user, payload) {
       const { clienteId, userId } = payload;
+
+      // IDOR Check
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's users.");
+      }
+
       const result = await db.query(
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1 AND (u.id::text = $2 OR u.username = $2)',
         [clienteId, userId]
@@ -142,10 +160,27 @@ class ClientDomain {
     'user-update': async function (user, payload) {
       const { clienteId, userId, data } = payload;
 
+      // IDOR Check
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's users.");
+      }
+
       const ALLOWED_FIELDS = ['password', 'role_id', 'username'];
       const keys = Object.keys(data).filter((key) => ALLOWED_FIELDS.includes(key));
 
       if (keys.length === 0) throw new EngineError('INVALID_PAYLOAD');
+
+      // RBAC: Check if role_id is being updated and if the user is allowed to do so
+      if (data.role_id) {
+        const roleCheck = await db.query('SELECT nombre FROM roles WHERE id = $1', [data.role_id]);
+        const targetRoleName = roleCheck.rows[0]?.nombre;
+        if (targetRoleName !== 'USUARIO' && user.role_name !== 'SUPER_ADMIN') {
+          throw new EngineError(
+            'FORBIDDEN',
+            'Only system administrators can assign elevated roles.'
+          );
+        }
+      }
 
       const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
       const values = keys.map((key) => data[key]);
@@ -176,6 +211,12 @@ class ClientDomain {
 
     'user-list': async function (user, payload) {
       const { clienteId, filter, limit, offset } = payload;
+
+      // IDOR Check
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's users.");
+      }
+
       let query =
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1';
       const params = [clienteId];
@@ -201,6 +242,11 @@ class ClientDomain {
 
     'schema-extend': async function (user, payload) {
       const { clienteId, newFields } = payload;
+
+      // IDOR Check
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's config.");
+      }
 
       const result = await db.query(
         'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
