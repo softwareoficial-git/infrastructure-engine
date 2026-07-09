@@ -111,17 +111,14 @@ class Motor {
 
     await this.authorize(user, domain);
 
-    // --- MANDATORY TENANT ISOLATION (IDOR FIX) ---
+    // --- MANDATORY TENANT ISOLATION (TENANT FORCING) ---
     const tenantScopedDomains = ['CLIENT', 'USER', 'MONITOR'];
     if (tenantScopedDomains.includes(domain) && user.role_name !== 'SUPER_ADMIN') {
-      const requestedTenantId = payload.clienteId || payload.tenantId;
-      if (requestedTenantId !== undefined && requestedTenantId !== null) {
-        if (Number(user.cliente_id) !== Number(requestedTenantId)) {
-          throw new EngineError(
-            'FORBIDDEN',
-            'Tenant mismatch: You cannot access data from another client.'
-          );
-        }
+      // Overwrite any payload tenant identifiers with the authenticated user's tenant ID
+      // This prevents IDOR even if the calling backend requests a different tenant
+      payload.clienteId = user.cliente_id;
+      if (payload.tenantId !== undefined) {
+        payload.tenantId = user.cliente_id;
       }
     }
 
