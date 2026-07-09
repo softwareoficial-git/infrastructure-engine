@@ -15,6 +15,8 @@ require('./domains/monitor');
 
 const app = express();
 
+app.use(express.json());
+
 // --- GLOBAL SANITIZATION MIDDLEWARE ---
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
@@ -115,7 +117,6 @@ const performEventLog = async (req, res, command, status, errorCode = null, cust
   }
 };
 
-app.use(express.json());
 app.use(requestLogger);
 
 const PORT = process.env.PORT || 3001;
