@@ -79,12 +79,28 @@ class ClientDomain {
     'user-create': async function (user, payload) {
       const { username, password, role_id, clienteId } = payload;
 
-      const result = await db.query(
-        'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [username, password, role_id, `TOKEN_${Math.random().toString(36).substr(2, 9)}`, clienteId]
-      );
+      try {
+        const result = await db.query(
+          'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+          [
+            username,
+            password,
+            role_id,
+            `TOKEN_${Math.random().toString(36).substr(2, 9)}`,
+            clienteId,
+          ]
+        );
 
-      return { status: 'success', usuario: result.rows[0] };
+        return { status: 'success', usuario: result.rows[0] };
+      } catch (error) {
+        if (error.code === '23505') {
+          throw new EngineError('USER_EXISTS');
+        }
+        if (error.code === '23503') {
+          throw new EngineError('INVALID_PAYLOAD', 'The provided role_id or clienteId is invalid.');
+        }
+        throw error;
+      }
     },
 
     'user-read': async function (user, payload) {
@@ -113,13 +129,24 @@ class ClientDomain {
       const clienteParamIdx = values.length + 1;
       const userParamIdx = values.length + 2;
 
-      const result = await db.query(
-        `UPDATE usuarios SET ${setClause} WHERE cliente_id = $${clienteParamIdx} AND (id::text = $${userParamIdx} OR username = $${userParamIdx}) RETURNING *`,
-        finalParams
-      );
+      try {
+        const result = await db.query(
+          `UPDATE usuarios SET ${setClause} WHERE cliente_id = $${clienteParamIdx} AND (id::text = $${userParamIdx} OR username = $${userParamIdx}) RETURNING *`,
+          finalParams
+        );
 
-      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
-      return { status: 'success', usuario: result.rows[0] };
+        if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
+        return { status: 'success', usuario: result.rows[0] };
+      } catch (error) {
+        if (error.code === '23505') {
+          throw new EngineError('USER_EXISTS');
+        }
+        if (error.code === '23503') {
+          throw new EngineError('INVALID_PAYLOAD', 'The provided role_id is invalid.');
+        }
+        if (error.name === 'EngineError') throw error;
+        throw error;
+      }
     },
 
     'user-list': async function (user, payload) {

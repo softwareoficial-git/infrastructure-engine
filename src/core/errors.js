@@ -35,6 +35,10 @@ const ERROR_CATALOG = {
     message: 'The specified client does not exist.',
     solution: 'Verify that the "clienteId" provided is correct and exists in the database.',
   },
+  USER_EXISTS: {
+    message: 'A user with this username already exists.',
+    solution: 'Choose a different username or recover the existing account.',
+  },
   USER_NOT_FOUND: {
     message: 'The specified user was not found.',
     solution: 'Verify the username or userId provided.',
