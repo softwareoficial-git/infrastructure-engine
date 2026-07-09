@@ -1,6 +1,7 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
 const { EngineError } = require('../core/errors');
+const { sanitizeObject } = require('../utils/security');
 
 class UserDomain {
   static domain = 'USER';
@@ -104,6 +105,11 @@ class UserDomain {
   static commands = {
     read: async function (user, payload) {
       const { clienteId } = payload;
+
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
+      }
+
       const result = await db.query('SELECT public_config FROM clientes WHERE id = $1', [
         clienteId,
       ]);
@@ -113,9 +119,16 @@ class UserDomain {
 
     write: async function (user, payload) {
       const { clienteId, data } = payload;
+
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
+      }
+
+      const sanitizedData = sanitizeObject(data);
+
       const result = await db.query(
         "UPDATE clientes SET public_config = COALESCE(public_config, '{}'::jsonb) || $2 WHERE id = $1 RETURNING public_config",
-        [clienteId, JSON.stringify(data)]
+        [clienteId, JSON.stringify(sanitizedData)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
@@ -123,6 +136,11 @@ class UserDomain {
 
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
+
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
+      }
+
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
         'SELECT public_config #> $2 as value FROM clientes WHERE id = $1',
@@ -137,6 +155,10 @@ class UserDomain {
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
 
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
+      }
+
       // Validate path format: Disallow brackets [] to prevent "selector" style paths
       if (path.includes('[') || path.includes(']')) {
         throw new EngineError(
@@ -146,9 +168,10 @@ class UserDomain {
       }
 
       const pgPath = UserDomain.parsePath(path);
+      const sanitizedValue = sanitizeObject(value);
       const result = await db.query(
         "UPDATE clientes SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config",
-        [clienteId, pgPath, JSON.stringify(value)]
+        [clienteId, pgPath, JSON.stringify(sanitizedValue)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
@@ -156,7 +179,13 @@ class UserDomain {
 
     'push-item': async function (user, payload) {
       const { clienteId, path, item } = payload;
+
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
+      }
+
       const pgPath = UserDomain.parsePath(path);
+      const sanitizedItem = sanitizeObject(item);
 
       const result = await db.query(
         `UPDATE clientes
@@ -168,7 +197,7 @@ class UserDomain {
          )
          WHERE id = $1
          RETURNING public_config`,
-        [clienteId, pgPath, JSON.stringify([item])]
+        [clienteId, pgPath, JSON.stringify([sanitizedItem])]
       );
 
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
@@ -177,6 +206,11 @@ class UserDomain {
 
     'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
+
+      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
+      }
+
       const pgPath = UserDomain.parsePath(path);
 
       let query = `
