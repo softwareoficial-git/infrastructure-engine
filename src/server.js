@@ -3,6 +3,7 @@ const express = require('express');
 const motor = require('./core/motor');
 const db = require('./core/db');
 const { v4: uuidv4 } = require('uuid');
+const { sanitizeObject } = require('./utils/security');
 
 // Import domains to register commands
 require('./domains/system');
@@ -13,6 +14,15 @@ require('./domains/user');
 require('./domains/monitor');
 
 const app = express();
+
+// --- GLOBAL SANITIZATION MIDDLEWARE ---
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {
+    req.body = sanitizeObject(req.body);
+  }
+  next();
+});
+
 // --- LOGGING MIDDLEWARE ---
 const requestLogger = (req, res, next) => {
   const start = Date.now();

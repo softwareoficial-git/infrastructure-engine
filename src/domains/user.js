@@ -106,7 +106,7 @@ class UserDomain {
     read: async function (user, payload) {
       const { clienteId } = payload;
 
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
         throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
@@ -120,7 +120,7 @@ class UserDomain {
     write: async function (user, payload) {
       const { clienteId, data } = payload;
 
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
         throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
@@ -137,7 +137,7 @@ class UserDomain {
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
 
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
         throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
@@ -155,7 +155,7 @@ class UserDomain {
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
 
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
         throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
@@ -180,7 +180,7 @@ class UserDomain {
     'push-item': async function (user, payload) {
       const { clienteId, path, item } = payload;
 
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
         throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
@@ -207,7 +207,7 @@ class UserDomain {
     'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
 
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
         throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 

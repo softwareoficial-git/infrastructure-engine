@@ -90,7 +90,7 @@ class ClientDomain {
       }
 
       // IDOR Check: User must belong to the client they are creating users for (unless SUPER_ADMIN)
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
         throw new EngineError('FORBIDDEN', 'You cannot create users for another client.');
       }
 
@@ -144,8 +144,8 @@ class ClientDomain {
       const { clienteId, userId } = payload;
 
       // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's users.");
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
       const result = await db.query(
@@ -161,8 +161,8 @@ class ClientDomain {
       const { clienteId, userId, data } = payload;
 
       // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's users.");
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
       const ALLOWED_FIELDS = ['password', 'role_id', 'username'];
@@ -213,8 +213,8 @@ class ClientDomain {
       const { clienteId, filter, limit, offset } = payload;
 
       // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's users.");
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
       let query =
@@ -244,8 +244,8 @@ class ClientDomain {
       const { clienteId, newFields } = payload;
 
       // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's config.");
+      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
+        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
       }
 
       const result = await db.query(
