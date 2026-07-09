@@ -55,6 +55,11 @@ const ERROR_CATALOG = {
     message: 'The requested system configuration key was not found.',
     solution: 'Verify the key provided.',
   },
+  INVALID_PATH_FORMAT: {
+    message: 'The provided path format is invalid.',
+    solution:
+      'Use simple dot notation (e.g., "settings.theme"). Selectors like "[code=...]" are not supported. Use "USER:query-json" first to find the correct index.',
+  },
   SYSTEM_UNHEALTHY: {
     message: 'The system is currently unhealthy.',
     solution: 'Contact the infrastructure team immediately.',

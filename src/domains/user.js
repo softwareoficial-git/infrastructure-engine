@@ -39,7 +39,7 @@ class UserDomain {
       properties: {
         clienteId: { type: 'integer', description: 'The unique ID of the client.' },
         path: { type: 'string', description: 'Path in dot notation (e.g., "settings.theme").' },
-        value: { type: 'string' }, // Simplified to string for a general implementation
+        value: {}, // Allow any type (string, number, object, boolean)
       },
       required: ['clienteId', 'path', 'value'],
     },
@@ -136,6 +136,15 @@ class UserDomain {
 
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
+
+      // Validate path format: Disallow brackets [] to prevent "selector" style paths
+      if (path.includes('[') || path.includes(']')) {
+        throw new EngineError(
+          'INVALID_PATH_FORMAT',
+          `Ruta recibida: '${path}' -> Formato no soportado. Use rutas simples separadas por puntos.`
+        );
+      }
+
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
         "UPDATE clientes SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config",
