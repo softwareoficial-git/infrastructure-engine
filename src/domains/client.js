@@ -12,9 +12,10 @@ class ClientDomain {
         username: { type: 'string', minLength: 1 },
         password: { type: 'string', minLength: 6 },
         role_id: { type: 'integer' },
+        role: { type: 'string' },
         clienteId: { type: 'integer' },
       },
-      required: ['username', 'password', 'role_id', 'clienteId'],
+      required: ['username', 'password'],
     },
     'user-read': {
       type: 'object',
@@ -77,7 +78,31 @@ class ClientDomain {
 
   static commands = {
     'user-create': async function (user, payload) {
-      const { username, password, role_id, clienteId } = payload;
+      let { username, password, role_id, role, clienteId } = payload;
+
+      // 1. Resolve ClienteId from context if missing
+      if (!clienteId) {
+        if (user && typeof user.cliente_id === 'number') {
+          clienteId = user.cliente_id;
+        } else {
+          throw new EngineError('FORBIDDEN', 'No active client context found for user creation.');
+        }
+      }
+
+      // 2. Resolve RoleId from role name if missing
+      if (!role_id && role) {
+        const roleRes = await db.query('SELECT id FROM roles WHERE nombre = $1', [
+          role.toUpperCase(),
+        ]);
+        if (roleRes.rows.length === 0) {
+          throw new EngineError('INVALID_PAYLOAD', `Role '${role}' not found.`);
+        }
+        role_id = roleRes.rows[0].id;
+      }
+
+      if (!role_id) {
+        throw new EngineError('INVALID_PAYLOAD', 'Either role_id or role must be provided.');
+      }
 
       try {
         const result = await db.query(
