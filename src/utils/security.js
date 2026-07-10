@@ -1,11 +1,15 @@
+const bcrypt = require('bcrypt');
+const validator = require('validator');
+const crypto = require('crypto');
+
 /**
- * Security Utility for input sanitization.
- * Prevents XSS by removing HTML tags from strings.
+ * Security Utility for input sanitization and credential management.
  */
+
 const sanitize = (value) => {
   if (typeof value !== 'string') return value;
-  // Remove HTML tags using a simple regex
-  return value.replace(/<[^>]*>?/gm, '');
+  // Use validator.escape to prevent XSS by converting characters like <, >, &, ', " to HTML entities
+  return validator.escape(value);
 };
 
 const sanitizeObject = (obj) => {
@@ -19,7 +23,23 @@ const sanitizeObject = (obj) => {
   return sanitized;
 };
 
+const hashPassword = async (password) => {
+  const saltRounds = 10;
+  return await bcrypt.hash(password, saltRounds);
+};
+
+const verifyPassword = async (password, hash) => {
+  return await bcrypt.compare(password, hash);
+};
+
+const generateSecureToken = () => {
+  return crypto.randomUUID();
+};
+
 module.exports = {
   sanitize,
   sanitizeObject,
+  hashPassword,
+  verifyPassword,
+  generateSecureToken,
 };

@@ -1,12 +1,26 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
 const { EngineError } = require('../core/errors');
-const { sanitizeObject } = require('../utils/security');
+const bcrypt = require('bcrypt');
 
 class UserDomain {
   static domain = 'USER';
 
   static schemas = {
+    login: {
+      type: 'object',
+      description: 'Authenticates a user and returns their access token.',
+      properties: {
+        username: { type: 'string' },
+        password: { type: 'string' },
+      },
+      required: ['username', 'password'],
+    },
+    'get-profile': {
+      type: 'object',
+      description: "Returns the authenticated user's profile and client information.",
+      properties: {},
+    },
     read: {
       type: 'object',
       description: 'Reads the full public configuration of a specific client.',
@@ -70,6 +84,11 @@ class UserDomain {
   };
 
   static docs = {
+    login: {
+      description: 'Authenticates a user and returns a token.',
+      errors: ['INVALID_CREDENTIALS'],
+    },
+    'get-profile': { description: "Returns the current user's profile.", errors: [] },
     read: {
       description: 'Fetch the full public config.',
       errors: ['CLIENT_NOT_FOUND', 'FORBIDDEN'],
@@ -103,15 +122,52 @@ class UserDomain {
   }
 
   static commands = {
-    read: async function (user, payload) {
-      const { clienteId } = payload;
+    login: async function (user, payload) {
+      const { username, password } = payload;
 
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
+      const result = await db.query(
+        'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.username = $1',
+        [username]
+      );
+
+      if (result.rows.length === 0) {
+        throw new EngineError('INVALID_CREDENTIALS', 'Invalid username or password.');
       }
 
+      const userData = result.rows[0];
+      const isValid = await bcrypt.compare(password, userData.password);
+
+      if (!isValid) {
+        throw new EngineError('INVALID_CREDENTIALS', 'Invalid username or password.');
+      }
+
+      return {
+        status: 'success',
+        token: userData.token,
+        user: {
+          id: userData.id,
+          username: userData.username,
+          role: userData.role_name,
+        },
+      };
+    },
+
+    'get-profile': async function (user) {
+      const result = await db.query(
+        'SELECT u.id, u.username, r.nombre as role_name, c.nombre as cliente_nombre FROM usuarios u JOIN roles r ON u.role_id = r.id JOIN clientes c ON u.cliente_id = c.id WHERE u.id = $1',
+        [user.id]
+      );
+
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
+      return { status: 'success', profile: result.rows[0] };
+    },
+
+    read: async function (user, payload) {
+      const { clienteId } = payload;
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+
       const result = await db.query('SELECT public_config FROM clientes WHERE id = $1', [
-        clienteId,
+        targetClientId,
       ]);
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', data: result.rows[0].public_config };
@@ -119,16 +175,11 @@ class UserDomain {
 
     write: async function (user, payload) {
       const { clienteId, data } = payload;
-
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
-
-      const sanitizedData = sanitizeObject(data);
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
 
       const result = await db.query(
         "UPDATE clientes SET public_config = COALESCE(public_config, '{}'::jsonb) || $2 WHERE id = $1 RETURNING public_config",
-        [clienteId, JSON.stringify(sanitizedData)]
+        [targetClientId, JSON.stringify(data)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
@@ -136,15 +187,12 @@ class UserDomain {
 
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
-
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
         'SELECT public_config #> $2 as value FROM clientes WHERE id = $1',
-        [clienteId, pgPath]
+        [targetClientId, pgPath]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       const value = result.rows[0].value;
@@ -154,24 +202,19 @@ class UserDomain {
 
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
 
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
-
-      // Validate path format: Disallow brackets [] to prevent "selector" style paths
       if (path.includes('[') || path.includes(']')) {
         throw new EngineError(
           'INVALID_PATH_FORMAT',
-          `Ruta recibida: '${path}' -> Formato no soportado. Use rutas simples separadas por puntos.`
+          `Ruta recibida: '${path}' -> Formato no soportado.`
         );
       }
 
       const pgPath = UserDomain.parsePath(path);
-      const sanitizedValue = sanitizeObject(value);
       const result = await db.query(
         "UPDATE clientes SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config",
-        [clienteId, pgPath, JSON.stringify(sanitizedValue)]
+        [targetClientId, pgPath, JSON.stringify(value)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
@@ -179,13 +222,9 @@ class UserDomain {
 
     'push-item': async function (user, payload) {
       const { clienteId, path, item } = payload;
-
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
-      const sanitizedItem = sanitizeObject(item);
 
       const result = await db.query(
         `UPDATE clientes
@@ -197,7 +236,7 @@ class UserDomain {
          )
          WHERE id = $1
          RETURNING public_config`,
-        [clienteId, pgPath, JSON.stringify([sanitizedItem])]
+        [targetClientId, pgPath, JSON.stringify([item])]
       );
 
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
@@ -206,10 +245,7 @@ class UserDomain {
 
     'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
-
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 
@@ -220,7 +256,7 @@ class UserDomain {
         ) sub
         WHERE item @> $3::jsonb
       `;
-      const params = [clienteId, pgPath, JSON.stringify(filter)];
+      const params = [targetClientId, pgPath, JSON.stringify(filter)];
 
       if (limit !== undefined) {
         query += ` LIMIT $${params.length + 1}`;

@@ -12,6 +12,7 @@ require('./domains/app');
 require('./domains/client');
 require('./domains/user');
 require('./domains/monitor');
+require('./domains/analytics');
 
 const app = express();
 
@@ -50,13 +51,6 @@ const requestLogger = (req, res, next) => {
 // --- GLOBAL EVENT LOGGER HELPER ---
 const performEventLog = async (req, res, command, status, errorCode = null, customPayload = {}) => {
   try {
-    const bootstrapUser = {
-      id: 0,
-      role_name: 'SUPER_ADMIN',
-      role_id: 1,
-      token: 'BOOTSTRAP_TOKEN',
-    };
-
     const user = req.user || null;
     const body = req.body || {};
     const payload = body.payload || {};
@@ -148,14 +142,9 @@ const authenticate = async (req, res, next) => {
   req.requestId = requestId;
 
   if (!token) {
-    return sendResponse(
-      res,
-      401,
-      'error',
-      null,
-      { code: 'AUTH_REQUIRED', message: 'Authentication token is required.' },
-      requestId
-    );
+    // Allow request to proceed without a token;
+    // the motor.authorize() method will decide if the domain is public.
+    return next();
   }
 
   try {
@@ -396,7 +385,7 @@ async function startServer() {
     // 3. Automatic Migration Check
     const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 5; // Updated to v5 for JSONB NOT NULL enforcement
+    const TARGET_VERSION = 6; // Updated to v6 for Analytics tables and pgcrypto extension
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);

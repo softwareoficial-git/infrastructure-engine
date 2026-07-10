@@ -1,6 +1,7 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
 const { EngineError } = require('../core/errors');
+const { hashPassword, generateSecureToken } = require('../utils/security');
 
 class ClientDomain {
   static domain = 'CLIENT';
@@ -11,8 +12,7 @@ class ClientDomain {
       properties: {
         username: { type: 'string', minLength: 1 },
         password: { type: 'string', minLength: 6 },
-        role_id: { type: 'integer' },
-        role: { type: 'string' },
+        role: { type: 'string', enum: ['CLIENT_ADMIN', 'USER'] },
         clienteId: { type: 'integer' },
       },
       required: ['username', 'password'],
@@ -21,18 +21,25 @@ class ClientDomain {
       type: 'object',
       properties: {
         clienteId: { type: 'integer' },
-        userId: { type: 'string', description: 'Can be the numeric ID or the username.' },
+        userId: { type: 'string' },
       },
-      required: ['clienteId', 'userId'],
+      required: ['userId'],
     },
     'user-update': {
       type: 'object',
       properties: {
         clienteId: { type: 'integer' },
         userId: { type: 'string' },
-        data: { type: 'object', description: 'Fields to update (e.g., password, role_id).' },
+        data: {
+          type: 'object',
+          properties: {
+            password: { type: 'string', minLength: 6 },
+            role: { type: 'string', enum: ['CLIENT_ADMIN', 'USER'] },
+            username: { type: 'string' },
+          },
+        },
       },
-      required: ['clienteId', 'userId', 'data'],
+      required: ['userId', 'data'],
     },
     'user-list': {
       type: 'object',
@@ -43,7 +50,7 @@ class ClientDomain {
           properties: { role_name: { type: 'string' } },
         },
       },
-      required: ['clienteId'],
+      required: [],
     },
     'schema-extend': {
       type: 'object',
@@ -51,25 +58,15 @@ class ClientDomain {
         clienteId: { type: 'integer' },
         newFields: { type: 'object' },
       },
-      required: ['clienteId', 'newFields'],
+      required: ['newFields'],
     },
   };
 
   static docs = {
     'user-create': { description: 'Creates a new user for a client.', errors: ['USER_EXISTS'] },
-    'user-read': {
-      description: 'Gets details of a specific user by ID or username.',
-      errors: ['USER_NOT_FOUND'],
-    },
-    'user-update': {
-      description: 'Updates user details like password or role.',
-      errors: ['USER_NOT_FOUND'],
-    },
-    'user-list': {
-      description:
-        'Lists users of a client with optional role filtering. Supports limit and offset for pagination.',
-      errors: [],
-    },
+    'user-read': { description: 'Gets details of a specific user.', errors: ['USER_NOT_FOUND'] },
+    'user-update': { description: 'Updates user details.', errors: ['USER_NOT_FOUND'] },
+    'user-list': { description: 'Lists users of a client.', errors: [] },
     'schema-extend': {
       description: "Adds new fields to a client's config.",
       errors: ['CLIENT_NOT_FOUND'],
@@ -78,79 +75,47 @@ class ClientDomain {
 
   static commands = {
     'user-create': async function (user, payload) {
-      let { username, password, role_id, role, clienteId } = payload;
+      let { username, password, role, clienteId } = payload;
 
-      // 1. Resolve ClienteId from context if missing
-      if (!clienteId) {
-        if (user && typeof user.cliente_id === 'number') {
-          clienteId = user.cliente_id;
-        } else {
-          throw new EngineError('FORBIDDEN', 'No active client context found for user creation.');
-        }
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+      if (!targetClientId) throw new EngineError('FORBIDDEN', 'Client context missing.');
+
+      if (!role) role = 'USER';
+
+      // RBAC: Only SUPER_ADMIN can create CLIENT_ADMINs
+      if (role === 'CLIENT_ADMIN' && user.role_name !== 'SUPER_ADMIN') {
+        throw new EngineError('FORBIDDEN', 'Only system admins can create client admins.');
       }
 
-      // IDOR Check: User must belong to the client they are creating users for (unless SUPER_ADMIN)
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', 'You cannot create users for another client.');
-      }
+      const roleRes = await db.query('SELECT id FROM roles WHERE nombre = $1', [
+        role.toUpperCase(),
+      ]);
+      if (roleRes.rows.length === 0)
+        throw new EngineError('INVALID_PAYLOAD', `Role ${role} not found.`);
+      const roleId = roleRes.rows[0].id;
 
-      // 2. Resolve RoleId from role name if missing
-      if (!role_id && role) {
-        const roleRes = await db.query('SELECT id FROM roles WHERE nombre = $1', [
-          role.toUpperCase(),
-        ]);
-        if (roleRes.rows.length === 0) {
-          throw new EngineError('INVALID_PAYLOAD', `Role '${role}' not found.`);
-        }
-        role_id = roleRes.rows[0].id;
-      }
-
-      if (!role_id) {
-        throw new EngineError('INVALID_PAYLOAD', 'Either role_id or role must be provided.');
-      }
-
-      // RBAC: Prevent Privilege Escalation. Only SUPER_ADMIN can assign roles other than 'USUARIO'.
-      const roleCheck = await db.query('SELECT nombre FROM roles WHERE id = $1', [role_id]);
-      const assignedRoleName = roleCheck.rows[0]?.nombre;
-      if (assignedRoleName !== 'USUARIO' && user.role_name !== 'SUPER_ADMIN') {
-        throw new EngineError('FORBIDDEN', 'Only system administrators can assign elevated roles.');
-      }
+      const hashedPassword = await hashPassword(password);
+      const token = generateSecureToken();
 
       try {
         const result = await db.query(
           'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-          [
-            username,
-            password,
-            role_id,
-            `TOKEN_${Math.random().toString(36).substr(2, 9)}`,
-            clienteId,
-          ]
+          [username, hashedPassword, roleId, token, targetClientId]
         );
-
         return { status: 'success', usuario: result.rows[0] };
       } catch (error) {
-        if (error.code === '23505') {
-          throw new EngineError('USER_EXISTS');
-        }
-        if (error.code === '23503') {
-          throw new EngineError('INVALID_PAYLOAD', 'The provided role_id or clienteId is invalid.');
-        }
+        if (error.code === '23505') throw new EngineError('USER_EXISTS');
         throw error;
       }
     },
 
     'user-read': async function (user, payload) {
-      const { clienteId, userId } = payload;
-
-      // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
+      const { userId } = payload;
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
 
       const result = await db.query(
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1 AND (u.id::text = $2 OR u.username = $2)',
-        [clienteId, userId]
+        [targetClientId, userId]
       );
 
       if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
@@ -158,82 +123,55 @@ class ClientDomain {
     },
 
     'user-update': async function (user, payload) {
-      const { clienteId, userId, data } = payload;
+      const { userId, data } = payload;
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
 
-      // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
-
-      const ALLOWED_FIELDS = ['password', 'role_id', 'username'];
+      const ALLOWED_FIELDS = ['password', 'role', 'username'];
       const keys = Object.keys(data).filter((key) => ALLOWED_FIELDS.includes(key));
-
       if (keys.length === 0) throw new EngineError('INVALID_PAYLOAD');
 
-      // RBAC: Check if role_id is being updated and if the user is allowed to do so
-      if (data.role_id) {
-        const roleCheck = await db.query('SELECT nombre FROM roles WHERE id = $1', [data.role_id]);
-        const targetRoleName = roleCheck.rows[0]?.nombre;
-        if (targetRoleName !== 'USUARIO' && user.role_name !== 'SUPER_ADMIN') {
-          throw new EngineError(
-            'FORBIDDEN',
-            'Only system administrators can assign elevated roles.'
-          );
+      const updates = [];
+      const params = [];
+      let paramIdx = 1;
+
+      for (const key of keys) {
+        let value = data[key];
+        if (key === 'password') value = await hashPassword(value);
+        if (key === 'role') {
+          const roleRes = await db.query('SELECT id FROM roles WHERE nombre = $1', [
+            value.toUpperCase(),
+          ]);
+          if (roleRes.rows.length === 0) throw new EngineError('INVALID_PAYLOAD', 'Invalid role.');
+          value = roleRes.rows[0].id;
+          if (value !== 0 && data.role === 'CLIENT_ADMIN' && user.role_name !== 'SUPER_ADMIN') {
+            throw new EngineError('FORBIDDEN', 'Cannot assign CLIENT_ADMIN role.');
+          }
         }
+        const dbKey = key === 'role' ? 'role_id' : key;
+        updates.push(`${dbKey} = $${paramIdx++}`);
+        params.push(value);
       }
 
-      const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
-      const values = keys.map((key) => data[key]);
+      params.push(targetClientId, userId);
+      const result = await db.query(
+        `UPDATE usuarios SET ${updates.join(', ')} WHERE cliente_id = $${params.length - 1} AND (id::text = $${params.length} OR username = $${params.length}) RETURNING *`,
+        params
+      );
 
-      const finalParams = [...values, clienteId, userId];
-      const clienteParamIdx = values.length + 1;
-      const userParamIdx = values.length + 2;
-
-      try {
-        const result = await db.query(
-          `UPDATE usuarios SET ${setClause} WHERE cliente_id = $${clienteParamIdx} AND (id::text = $${userParamIdx} OR username = $${userParamIdx}) RETURNING *`,
-          finalParams
-        );
-
-        if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
-        return { status: 'success', usuario: result.rows[0] };
-      } catch (error) {
-        if (error.code === '23505') {
-          throw new EngineError('USER_EXISTS');
-        }
-        if (error.code === '23503') {
-          throw new EngineError('INVALID_PAYLOAD', 'The provided role_id is invalid.');
-        }
-        if (error.name === 'EngineError') throw error;
-        throw error;
-      }
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
+      return { status: 'success', usuario: result.rows[0] };
     },
 
     'user-list': async function (user, payload) {
-      const { clienteId, filter, limit, offset } = payload;
-
-      // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
 
       let query =
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1';
-      const params = [clienteId];
+      const params = [targetClientId];
 
-      if (filter && filter.role_name) {
+      if (payload.filter && payload.filter.role_name) {
         query += ' AND r.nombre = $2';
-        params.push(filter.role_name);
-      }
-
-      if (limit !== undefined) {
-        query += ` LIMIT $${params.length + 1}`;
-        params.push(limit);
-      }
-
-      if (offset !== undefined) {
-        query += ` OFFSET $${params.length + 1}`;
-        params.push(offset);
+        params.push(payload.filter.role_name);
       }
 
       const result = await db.query(query, params);
@@ -241,20 +179,15 @@ class ClientDomain {
     },
 
     'schema-extend': async function (user, payload) {
-      const { clienteId, newFields } = payload;
-
-      // IDOR Check
-      if (user.role_name !== 'SUPER_ADMIN' && Number(user.cliente_id) !== Number(clienteId)) {
-        throw new EngineError('FORBIDDEN', "Access denied to this client's data.");
-      }
+      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
+      const { newFields } = payload;
 
       const result = await db.query(
         'UPDATE clientes SET public_config = public_config || $2 WHERE id = $1 RETURNING public_config',
-        [clienteId, JSON.stringify(newFields)]
+        [targetClientId, JSON.stringify(newFields)]
       );
 
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
-
       return { status: 'success', newConfig: result.rows[0].public_config };
     },
   };

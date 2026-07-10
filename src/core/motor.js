@@ -44,7 +44,7 @@ class Motor {
   async authorize(user, domain) {
     // Allow guest access for specific domains or if user is marked as GUEST
     if (!user || user.role_name === 'GUEST') {
-      const publicDomains = ['APP'];
+      const publicDomains = ['APP', 'ANALYTICS'];
       if (publicDomains.includes(domain)) {
         return;
       }
@@ -56,36 +56,17 @@ class Motor {
       return;
     }
 
-    // 1. Find all roles in the user's hierarchy (User -> Parent -> Grandparent...)
-    const roleChainQuery = `
-      WITH RECURSIVE role_chain AS (
-        SELECT id, nombre, parent_id
-        FROM roles
-        WHERE id = $1
-        UNION ALL
-        SELECT r.id, r.nombre, r.parent_id
-        FROM roles r
-        JOIN role_chain rc ON r.id = rc.parent_id
-      )
-      SELECT nombre FROM role_chain;
-    `;
-
-    const result = await db.query(roleChainQuery, [user.role_id]);
-    const userRoles = result.rows.map((r) => r.nombre);
-
-    // 2. Define which roles have access to which domains
+    // 2. Define which roles have access to which domains (FLAT HIERARCHY)
     const domainPermissions = {
       SYSTEM: ['SUPER_ADMIN'],
-      APP: ['SUPER_ADMIN', 'APP'],
-      CLIENT: ['SUPER_ADMIN', 'APP', 'CLIENTE'],
-      USER: ['SUPER_ADMIN', 'APP', 'CLIENTE', 'USUARIO'],
-      MONITOR: ['SUPER_ADMIN', 'APP', 'CLIENTE', 'USUARIO'],
+      APP: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'],
+      CLIENT: ['SUPER_ADMIN', 'CLIENT_ADMIN'],
+      USER: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'],
+      MONITOR: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'],
     };
 
     const allowedRoles = domainPermissions[domain] || [];
-    const hasAccess = userRoles.some((role) => allowedRoles.includes(role));
-
-    if (!hasAccess) {
+    if (!allowedRoles.includes(user.role_name)) {
       throw new EngineError('FORBIDDEN');
     }
   }
@@ -111,27 +92,20 @@ class Motor {
 
     await this.authorize(user, domain);
 
-    // --- MANDATORY TENANT ISOLATION (TENANT FORCING) ---
-    const tenantScopedDomains = ['CLIENT', 'USER', 'MONITOR'];
-    if (tenantScopedDomains.includes(domain) && user.role_name !== 'SUPER_ADMIN') {
-      // Overwrite any payload tenant identifiers with the authenticated user's tenant ID
-      // This prevents IDOR even if the calling backend requests a different tenant
-      payload.clienteId = user.cliente_id;
-      if (payload.tenantId !== undefined) {
-        payload.tenantId = user.cliente_id;
-      }
-    }
+    // --- GLOBAL SANITIZATION ---
+    const { sanitizeObject } = require('../utils/security');
+    const sanitizedPayload = sanitizeObject(payload);
 
     if (cmdConfig.schema) {
       const validate = ajv.compile(cmdConfig.schema);
-      const valid = validate(payload);
+      const valid = validate(sanitizedPayload);
       if (!valid) {
         const details = ajv.errorsText(validate.errors);
         throw new EngineError('INVALID_PAYLOAD', details);
       }
     }
 
-    return await cmdConfig.handler(user, payload, txClient);
+    return await cmdConfig.handler(user, sanitizedPayload, txClient);
   }
 
   listCommands() {

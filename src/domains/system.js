@@ -215,13 +215,16 @@ class SystemDomain {
 
     init: async function (user, payload, txClient = null) {
       console.log('Inicializando base de datos...');
+      const { hashPassword } = require('../utils/security');
+
+      // Ensure UUID extension is available
+      await (txClient || db).query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
 
       // 1. Crear Tablas Base
       await (txClient || db).query(`
         CREATE TABLE IF NOT EXISTS roles (
           id SERIAL PRIMARY KEY,
-          nombre VARCHAR(50) UNIQUE NOT NULL,
-          parent_id INTEGER REFERENCES roles(id)
+          nombre VARCHAR(50) UNIQUE NOT NULL
         );
       `);
 
@@ -282,62 +285,80 @@ class SystemDomain {
       `);
 
       await (txClient || db).query(`
+        CREATE TABLE IF NOT EXISTS logs_trafico (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          tenant_id INTEGER NOT NULL,
+          visit_type VARCHAR(50),
+          url TEXT,
+          referrer TEXT,
+          user_agent TEXT,
+          language VARCHAR(10),
+          request_id VARCHAR(100),
+          ip_address VARCHAR(45),
+          timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          country VARCHAR(100),
+          city VARCHAR(100),
+          isp VARCHAR(255),
+          browser VARCHAR(50),
+          os VARCHAR(50),
+          device_type VARCHAR(50)
+        );
+      `);
+
+      await (txClient || db).query(`
+        CREATE TABLE IF NOT EXISTS geoip_data (
+          id SERIAL PRIMARY KEY,
+          ip_start INET NOT NULL,
+          ip_end INET NOT NULL,
+          country VARCHAR(100),
+          city VARCHAR(100),
+          isp VARCHAR(255)
+        );
+      `);
+
+      await (txClient || db).query(`
         CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id);
         CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);
         CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);
       `);
 
-      // Indexación para alto volumen de datos en JSONB
-      // Usamos GIN con jsonb_path_ops para búsquedas rápidas de productos/claves
+      await (txClient || db).query(`
+        CREATE INDEX IF NOT EXISTS idx_trafico_timestamp ON logs_trafico(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_trafico_country ON logs_trafico(country);
+        CREATE INDEX IF NOT EXISTS idx_trafico_type ON logs_trafico(visit_type);
+        CREATE INDEX IF NOT EXISTS idx_geoip_start ON geoip_data(ip_start);
+        CREATE INDEX IF NOT EXISTS idx_geoip_end ON geoip_data(ip_end);
+      `);
+
       await (txClient || db).query(`
         CREATE INDEX IF NOT EXISTS idx_clientes_public_config
         ON clientes USING GIN (public_config jsonb_path_ops);
       `);
 
-      // 2. Cargar Roles Jerárquicos (Dinámicamente)
-      const rolesToCreate = ['SUPER_ADMIN', 'APP', 'CLIENTE', 'USUARIO'];
-      const hierarchy = {
-        SUPER_ADMIN: null,
-        APP: 'SUPER_ADMIN',
-        CLIENTE: 'APP',
-        USUARIO: 'CLIENTE',
-      };
-
+      // 2. Cargar Roles Planos
+      const rolesToCreate = ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'];
       for (const roleName of rolesToCreate) {
         await (txClient || db).query(
-          'INSERT INTO roles (nombre, parent_id) VALUES ($1, $2) ON CONFLICT (nombre) DO NOTHING',
-          [roleName, null]
+          'INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING',
+          [roleName]
         );
       }
 
-      for (const [roleName, parentName] of Object.entries(hierarchy)) {
-        if (parentName) {
-          const parentRes = await (txClient || db).query('SELECT id FROM roles WHERE nombre = $1', [
-            parentName,
-          ]);
-          if (parentRes.rows.length > 0) {
-            const parentId = parentRes.rows[0].id;
-            await (txClient || db).query('UPDATE roles SET parent_id = $1 WHERE nombre = $2', [
-              parentId,
-              roleName,
-            ]);
-          }
-        }
-      }
-
       // 3. Crear Super Admin Inicial
-      const adminToken = process.env.ADMIN_SECRET_TOKEN;
+      const adminToken = process.env.ADMIN_SECRET_TOKEN || 'BOOTSTRAP_TOKEN';
+      const adminPasswordHash = await hashPassword('admin123');
+
       await (txClient || db).query(
         `INSERT INTO usuarios (username, password, role_id, token)
-         VALUES ('superadmin', 'admin123', (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN'), $1)
+         VALUES ('superadmin', $1, (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN'), $2)
          ON CONFLICT (username) DO NOTHING`,
-        [adminToken]
+        [adminPasswordHash, adminToken]
       );
 
       return {
         status: 'success',
-        message: 'Sistema inicializado correctamente',
+        message: 'Sistema inicializado correctamente con roles planos',
         adminToken: adminToken,
       };
     },
@@ -614,6 +635,50 @@ class SystemDomain {
         `);
         await client.query('UPDATE clientes SET schema_version = 5');
         console.log('✅ Migration v5 completed.');
+      }
+
+      if (currentVersion < 6 && targetVersion >= 6) {
+        console.log('Applying Migration v6: Creating analytics tables...');
+        await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS logs_trafico (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            tenant_id INTEGER NOT NULL,
+            visit_type VARCHAR(50),
+            url TEXT,
+            referrer TEXT,
+            user_agent TEXT,
+            language VARCHAR(10),
+            request_id VARCHAR(100),
+            ip_address VARCHAR(45),
+            timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            country VARCHAR(100),
+            city VARCHAR(100),
+            isp VARCHAR(255),
+            browser VARCHAR(50),
+            os VARCHAR(50),
+            device_type VARCHAR(50)
+          );
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS geoip_data (
+            id SERIAL PRIMARY KEY,
+            ip_start INET NOT NULL,
+            ip_end INET NOT NULL,
+            country VARCHAR(100),
+            city VARCHAR(100),
+            isp VARCHAR(255)
+          );
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_trafico_timestamp ON logs_trafico(timestamp);
+          CREATE INDEX IF NOT EXISTS idx_trafico_country ON logs_trafico(country);
+          CREATE INDEX IF NOT EXISTS idx_trafico_type ON logs_trafico(visit_type);
+          CREATE INDEX IF NOT EXISTS idx_geoip_start ON geoip_data(ip_start);
+          CREATE INDEX IF NOT EXISTS idx_geoip_end ON geoip_data(ip_end);
+        `);
+        await client.query('UPDATE clientes SET schema_version = 6');
+        console.log('✅ Migration v6 completed.');
       }
 
       return {
