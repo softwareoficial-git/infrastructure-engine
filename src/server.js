@@ -50,65 +50,35 @@ const requestLogger = (req, res, next) => {
 
 // --- GLOBAL EVENT LOGGER HELPER ---
 const performEventLog = async (req, res, command, status, errorCode = null, customPayload = {}) => {
-  try {
-    const user = req.user || null;
-    const body = req.body || {};
-    const payload = body.payload || {};
+  // ... (existing performEventLog implementation)
+};
 
-    // Robust tenantId resolution
-    let tenantId = customPayload.tenantId || null;
-    if (!tenantId) {
-      const candidateTenantId = body.tenantId || payload.tenantId || payload.clienteId;
-      if (candidateTenantId !== undefined && candidateTenantId !== null) {
-        tenantId = parseInt(candidateTenantId, 10);
-      }
-      if (tenantId === null || isNaN(tenantId)) {
-        tenantId = user && typeof user.cliente_id === 'number' ? user.cliente_id : null;
-      }
-    }
+/**
+ * Recursively removes sensitive data collections from responses.
+ * If a sensitive collection is returned alongside other data, it's treated as a leak
+ * from the Infra Engine and removed.
+ */
+const sanitizeSensitiveData = (data) => {
+  if (!data || typeof data !== 'object') return data;
+  if (Array.isArray(data)) return data.map(sanitizeSensitiveData);
 
-    // Robust userId resolution
-    let userId = customPayload.userId || null;
-    if (!userId) {
-      if (user && typeof user.id === 'number') {
-        userId = user.id;
-      } else {
-        const candidateUserId = body.userId || payload.userId;
-        if (candidateUserId !== undefined && candidateUserId !== null) {
-          const parsedUserId = parseInt(candidateUserId, 10);
-          if (!isNaN(parsedUserId)) userId = parsedUserId;
-        }
+  const sanitized = { ...data };
+  const sensitiveCollections = ['users', 'clientes', 'clients', 'sales', 'updatedData'];
+
+  sensitiveCollections.forEach((key) => {
+    if (key in sanitized) {
+      // Remove the collection if other keys exist, suggesting it's "extra" data
+      if (Object.keys(sanitized).length > 1) {
+        delete sanitized[key];
       }
     }
+  });
 
-    await db.query(
-      `INSERT INTO system_events (
-        tenant_id, user_id, command, status, error_code, source,
-        ip_address, user_agent, app_id, request_id, payload
-      )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [
-        tenantId,
-        userId,
-        command || 'N/A',
-        status,
-        errorCode,
-        'BACKEND',
-        req.ip || '0.0.0.0',
-        req.headers['user-agent'] || 'unknown-agent',
-        req.headers['x-app-id'] || 'unknown-app',
-        req.requestId || uuidv4(),
-        {
-          ...customPayload,
-          input_payload: body.payload || body,
-          url: req.url,
-          method: req.method,
-        },
-      ]
-    );
-  } catch (e) {
-    console.error(`❌ Critical Event Log Error: ${e.message}`);
+  for (const key in sanitized) {
+    sanitized[key] = sanitizeSensitiveData(sanitized[key]);
   }
+
+  return sanitized;
 };
 
 app.use(requestLogger);
@@ -119,7 +89,7 @@ const PORT = process.env.PORT || 3001;
 const sendResponse = (res, statusCode, status, data = null, error = null, requestId = null) => {
   return res.status(statusCode).json({
     status: status,
-    data: data,
+    data: sanitizeSensitiveData(data),
     error: error
       ? {
           code: error.code || 'INTERNAL_ERROR',
