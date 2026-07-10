@@ -245,7 +245,7 @@ app.post('/register', async (req, res) => {
 app.post('/execute', authenticate, async (req, res) => {
   const start = Date.now();
   const command = req.body.command || req.body.cmd;
-  const payload = req.body.payload || req.body.params;
+  let payload = req.body.payload || req.body.params || {};
   const requestId = req.requestId;
 
   if (!command) {
@@ -259,8 +259,19 @@ app.post('/execute', authenticate, async (req, res) => {
     );
   }
 
+  // Inject request metadata for ANALYTICS commands to make tracking invisible
+  if (command.startsWith('ANALYTICS:')) {
+    payload = {
+      ...payload,
+      _request: {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      },
+    };
+  }
+
   try {
-    const result = await motor.execute(req.user, command, payload || {});
+    const result = await motor.execute(req.user, command, payload);
     await performEventLog(req, res, command, 'SUCCESS', null, { duration: Date.now() - start });
     return sendResponse(res, 200, 'success', result, null, requestId);
   } catch (error) {

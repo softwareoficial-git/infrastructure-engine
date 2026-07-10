@@ -12,36 +12,24 @@ class AnalyticsDomain {
         visit_data: {
           type: 'object',
           properties: {
-            type: {
-              type: 'string',
-              description: 'Type of visit (e.g., page_view, click, conversion)',
-            },
-            url: { type: 'string', description: 'The full URL of the page visited' },
-            referrer: { type: 'string', description: 'The origin URL the user came from' },
-            userAgent: {
-              type: 'string',
-              description: 'The full User Agent string from the browser',
-            },
-            language: { type: 'string', description: 'Browser language (e.g., es-ES)' },
-            requestId: { type: 'string', description: 'Unique request ID for tracing' },
+            type: { type: 'string' },
+            url: { type: 'string' },
+            referrer: { type: 'string' },
+            userAgent: { type: 'string' },
+            language: { type: 'string' },
+            requestId: { type: 'string' },
           },
-          required: ['type', 'url', 'userAgent'],
         },
         network_data: {
           type: 'object',
           properties: {
-            ip: { type: 'string', description: 'Visitor IP address' },
-            timestamp: {
-              type: 'string',
-              format: 'date-time',
-              description: 'ISO 8601 timestamp of the visit',
-            },
+            ip: { type: 'string' },
+            timestamp: { type: 'string', format: 'date-time' },
           },
-          required: ['ip', 'timestamp'],
         },
-        tenantId: { type: 'string', description: 'Tenant identifier (Use "1" for global storage)' },
+        tenantId: { type: 'string' },
       },
-      required: ['visit_data', 'network_data', 'tenantId'],
+      required: [],
     },
     'list-visits': {
       type: 'object',
@@ -70,10 +58,28 @@ class AnalyticsDomain {
 
   static commands = {
     'track-visit': async function (user, payload) {
-      const { visit_data, network_data, tenantId } = payload;
-      const ip = network_data.ip;
+      // 1. Data Fabrication (The "Shield" logic)
+      const { visit_data = {}, network_data = {}, tenantId = '1', _request = {} } = payload;
 
-      // 1. GeoIP Enrichment
+      const finalPayload = {
+        tenantId: tenantId,
+        visit_data: {
+          type: visit_data.type || 'page_view',
+          url: visit_data.url || 'unknown_url',
+          userAgent: visit_data.userAgent || _request.userAgent || 'unknown_agent',
+          referrer: visit_data.referrer || 'direct',
+          language: visit_data.language || 'unknown',
+          requestId: visit_data.requestId || `req-${Math.random().toString(36).substr(2, 9)}`,
+        },
+        network_data: {
+          ip: network_data.ip || _request.ip || '0.0.0.0',
+          timestamp: network_data.timestamp || new Date().toISOString(),
+        },
+      };
+
+      const ip = finalPayload.network_data.ip;
+
+      // 2. GeoIP Enrichment
       let geo = { country: 'Unknown', city: 'Unknown', isp: 'Unknown' };
       try {
         const geoRes = await db.query(
@@ -87,11 +93,11 @@ class AnalyticsDomain {
         console.error('GeoIP lookup error:', e);
       }
 
-      // 2. Device Normalization
-      const ua = visit_data.userAgent;
+      // 3. Device Normalization
+      const ua = finalPayload.visit_data.userAgent;
       const device = normalizeUserAgent(ua);
 
-      // 3. Storage
+      // 4. Storage
       try {
         const result = await db.query(
           `INSERT INTO logs_trafico (
@@ -102,15 +108,15 @@ class AnalyticsDomain {
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
            RETURNING id`,
           [
-            parseInt(tenantId, 10) || 1,
-            visit_data.type,
-            visit_data.url,
-            visit_data.referrer,
-            ua,
-            visit_data.language,
-            visit_data.requestId,
-            ip,
-            network_data.timestamp,
+            parseInt(finalPayload.tenantId, 10) || 1,
+            finalPayload.visit_data.type,
+            finalPayload.visit_data.url,
+            finalPayload.visit_data.referrer,
+            finalPayload.visit_data.userAgent,
+            finalPayload.visit_data.language,
+            finalPayload.visit_data.requestId,
+            finalPayload.network_data.ip,
+            finalPayload.network_data.timestamp,
             geo.country,
             geo.city,
             geo.isp,
