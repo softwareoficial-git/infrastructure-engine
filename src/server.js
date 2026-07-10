@@ -244,7 +244,8 @@ app.post('/register', async (req, res) => {
  */
 app.post('/execute', authenticate, async (req, res) => {
   const start = Date.now();
-  const { command, payload } = req.body;
+  const command = req.body.command || req.body.cmd;
+  const payload = req.body.payload || req.body.params;
   const requestId = req.requestId;
 
   if (!command) {
