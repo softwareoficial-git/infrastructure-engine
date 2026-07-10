@@ -2,13 +2,37 @@ const db = require('./db');
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const { EngineError } = require('./errors');
+
 const ajv = new Ajv();
 addFormats(ajv);
+
+function translateAjvErrors(errors) {
+  return errors
+    .map((err) => {
+      const path = err.instancePath.replace('/', '') || 'root';
+      switch (err.keyword) {
+        case 'required':
+          return `El campo '${err.params.missingProperty}' es obligatorio.`;
+        case 'type':
+          return `El campo '${path}' debe ser de tipo ${err.params.type}.`;
+        case 'minLength':
+          return `El campo '${path}' es demasiado corto (mínimo ${err.params.limit} caracteres).`;
+        case 'enum':
+          return `El campo '${path}' tiene un valor no permitido. Opciones válidas: ${err.params.allowedValues.join(', ')}.`;
+        case 'format':
+          return `El campo '${path}' no tiene un formato válido de ${err.params.format}.`;
+        default:
+          return `Error en el campo '${path}': ${err.message}`;
+      }
+    })
+    .join(' ');
+}
 
 class Motor {
   constructor() {
     this.commands = {};
   }
+  // ... (rest of the class)
 
   registerCommand(domain, action, handler) {
     if (!this.commands[domain]) {
@@ -100,7 +124,7 @@ class Motor {
       const validate = ajv.compile(cmdConfig.schema);
       const valid = validate(sanitizedPayload);
       if (!valid) {
-        const details = ajv.errorsText(validate.errors);
+        const details = translateAjvErrors(validate.errors);
         throw new EngineError('INVALID_PAYLOAD', details);
       }
     }

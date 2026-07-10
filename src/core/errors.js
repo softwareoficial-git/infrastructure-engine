@@ -76,12 +76,12 @@ const ERROR_CATALOG = {
 };
 
 class EngineError extends Error {
-  constructor(code, details = null) {
+  constructor(code, details = null, customSolution = null) {
     const errorDef = ERROR_CATALOG[code] || ERROR_CATALOG['INTERNAL_ERROR'];
     super(errorDef.message);
     this.name = 'EngineError';
     this.code = code;
-    this.solution = errorDef.solution;
+    this.solution = customSolution || errorDef.solution;
     this.details = details; // Used for AJV validation errors or specific context
   }
 }
