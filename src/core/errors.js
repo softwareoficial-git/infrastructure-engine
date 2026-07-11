@@ -21,9 +21,9 @@ const ERROR_CATALOG = {
       'Solo el ADMINISTRADOR o el DUEÑO del negocio pueden realizar cambios en la configuración del cliente.',
   },
   ACCESO_DENEGADO_ROL: {
-    message: 'Tu rol actual no tiene acceso a este dominio.',
+    message: 'Tu rol actual no tiene acceso a este comando.',
     solution:
-      'Contacta con tu administrador para verificar si tu rol debe tener acceso a este módulo.',
+      'Contacta con tu administrador para verificar si tu rol tiene los permisos necesarios para ejecutar esta acción.',
   },
   PERMISO_FALTANTE: {
     message: 'Permiso específico no asignado.',

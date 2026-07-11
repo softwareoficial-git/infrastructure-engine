@@ -147,12 +147,13 @@ class UserDomain {
         user: {
           id: userData.id,
           username: userData.username,
-          role: userData.role_name,
+          role_name: userData.role_name,
         },
       };
     },
 
     'get-profile': async function (user) {
+      console.log(`[DEBUG] get-profile requested for user.id: ${user.id}`);
       const result = await db.query(
         'SELECT u.id, u.username, r.nombre as role_name, c.nombre as cliente_nombre FROM usuarios u JOIN roles r ON u.role_id = r.id LEFT JOIN clientes c ON u.cliente_id = c.id WHERE u.id = $1',
         [user.id]
@@ -164,7 +165,7 @@ class UserDomain {
 
     read: async function (user, payload) {
       const { clienteId } = payload;
-      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
 
       if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Cliente no identificado.');
 
@@ -177,7 +178,7 @@ class UserDomain {
 
     write: async function (user, payload) {
       const { clienteId, data } = payload;
-      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
 
       const result = await db.query(
         "UPDATE clientes SET public_config = COALESCE(public_config, '{}'::jsonb) || $2 WHERE id = $1 RETURNING public_config",
@@ -189,7 +190,7 @@ class UserDomain {
 
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
-      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
@@ -204,7 +205,7 @@ class UserDomain {
 
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
-      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
 
       if (path.includes('[') || path.includes(']')) {
         throw new EngineError(
@@ -224,7 +225,7 @@ class UserDomain {
 
     'push-item': async function (user, payload) {
       const { clienteId, path, item } = payload;
-      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 
@@ -247,7 +248,7 @@ class UserDomain {
 
     'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
-      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 

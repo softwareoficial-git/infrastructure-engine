@@ -141,10 +141,10 @@ class AnalyticsDomain {
     },
 
     'list-visits': async function (user, payload) {
-      let { tenantId, visit_type, limit = 50, offset = 0 } = payload;
+      let { visit_type, limit = 50, offset = 0 } = payload;
 
       // Tenant Guard: Only ADMINISTRADOR can specify tenantId, others are locked to their own
-      const tid = user.role_name === 'ADMINISTRADOR' ? parseInt(tenantId, 10) : user.cliente_id;
+      const tid = user.targetTenantId;
 
       if (!tid)
         throw new EngineError(

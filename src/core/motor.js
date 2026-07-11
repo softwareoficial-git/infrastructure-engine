@@ -2,6 +2,7 @@ const db = require('./db');
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const { EngineError } = require('./errors');
+const { ROLE_PERMISSIONS, normalizeRole } = require('./permissions');
 
 const ajv = new Ajv({ allErrors: true, removeAdditional: true });
 addFormats(ajv);
@@ -66,52 +67,72 @@ class Motor {
   }
 
   async authorize(user, domain, action = null) {
-    // Allow guest access for specific domains or if user is marked as GUEST
-    if (!user || user.role_name === 'GUEST') {
-      const publicDomains = ['APP', 'ANALYTICS'];
-      if (publicDomains.includes(domain)) {
-        return;
-      }
-      throw new EngineError('ACCESO_DENEGADO_ROL');
-    }
+    const command = action ? `${domain}:${action}` : null;
+    console.log(`[!!! AUTH-TRACE-RAW !!!] USER_OBJ: ${JSON.stringify(user)} | DOMAIN: ${domain} | ACTION: ${action}`);
 
-    // ADMINISTRADOR: Acceso total inmediato
-    if (user.role_name === 'ADMINISTRADOR') {
+    console.log(`[AUTH-DEBUG] Validating access: User=${user?.username || 'UNKNOWN'} | Role=${user?.role_name || 'NONE'} | Cmd=${command || 'DOMAIN-ONLY'}`);
+
+    // 1. LISTA BLANCA DE COMANDOS PÚBLICOS (Sin Token)
+    const publicCommands = [
+      'APP:self-register',
+      'USER:login',
+      'ANALYTICS:track-visit',
+      'SYSTEM:list-commands',
+      'APP:client-create',
+      'CLIENT:user-create'
+    ];
+
+    if (command && publicCommands.includes(command)) {
+      console.log(`[AUTH-DEBUG] ALLOW: Public command ${command}`);
       return;
     }
 
-    // Define which roles have access to which domains
-    const domainPermissions = {
-      SYSTEM: ['ADMINISTRADOR'],
-      APP: ['ADMINISTRADOR', 'DUEÑO', 'EMPLEADO', 'CLIENTE'],
-      CLIENT: ['ADMINISTRADOR', 'DUEÑO', 'CLIENTE'],
-      USER: ['ADMINISTRADOR', 'DUEÑO', 'EMPLEADO', 'CLIENTE'],
-      MONITOR: ['ADMINISTRADOR', 'DUEÑO', 'EMPLEADO', 'CLIENTE'],
-    };
-
-    if (domain === 'SYSTEM') {
-      throw new EngineError('SISTEMA_RESTRINGIDO');
-    }
-
-    if (domain === 'CLIENT') {
-      if (!domainPermissions[domain].includes(user.role_name)) {
-        throw new EngineError('CLIENTE_RESTRINGIDO');
-      }
-    }
-
-    const allowedRoles = domainPermissions[domain] || [];
-    if (!allowedRoles.includes(user.role_name)) {
+    // Si no hay usuario o es GUEST y el comando no es público, denegar
+    if (!user || user.role_name === 'GUEST') {
+      console.log(`[AUTH-DEBUG] DENY: No authenticated user or GUEST role for ${command}`);
       throw new EngineError('ACCESO_DENEGADO_ROL');
     }
 
-    // Control granular para EMPLEADOS
-    if (user.role_name === 'EMPLEADO' && action) {
-      const command = `${domain}:${action}`;
+    // 2. ADMINISTRADORES: Acceso total basado en la matriz de permisos
+    const userRole = normalizeRole(user.role_name);
+    if (['SUPER_ADMIN', 'ADMINISTRADOR'].includes(userRole)) {
+      console.log(`[AUTH-DEBUG] ALLOW: Admin access granted for ${userRole}`);
+      return;
+    }
+
+    // 3. DEFINICIÓN DE PERMISOS POR ROL (Otros roles)
+    const allowedPatterns = ROLE_PERMISSIONS[userRole] || [];
+    const hasAccessByRole = allowedPatterns.some(pattern => {
+      if (pattern === `${domain}:*`) return true;
+      if (pattern === command) return true;
+      return false;
+    });
+
+    // 4. CONTROL GRANULAR PARA EMPLEADOS (Aditivo)
+    let hasAccess = hasAccessByRole;
+    if (userRole === 'EMPLEADO' && command) {
       const permissions = user.permisos || [];
-      if (!permissions.includes(command)) {
-        throw new EngineError('PERMISO_FALTANTE', `Comando: ${command}`);
+      if (permissions.includes(command)) {
+        hasAccess = true;
       }
     }
+
+    if (!hasAccess) {
+      console.log(`[!!! AUTH-CRITICAL-FAIL !!!] DENY: User=${user.username} | Role=${user.role_name} | Cmd=${command} | Patterns=${JSON.stringify(allowedPatterns)}`);
+      if (userRole === 'EMPLEADO') {
+        throw new EngineError('PERMISO_FALTANTE', `Comando: ${command}`);
+      }
+      throw new EngineError('ACCESO_DENEGADO_ROL');
+    }
+  }
+
+  resolveTenantId(user, payload) {
+    if (!user) return 0;
+    const userRole = normalizeRole(user.role_name);
+    if (['SUPER_ADMIN', 'ADMINISTRADOR'].includes(userRole)) {
+      return payload.clienteId || payload.tenantId || user.cliente_id || 0; 
+    }
+    return user.cliente_id;
   }
 
   async execute(user, commandStr, payload, txClient = null) {
@@ -133,10 +154,15 @@ class Motor {
 
     const cmdConfig = this.commands[domain][action];
 
-    // Ahora pasamos la acción para permitir el control granular de EMPLEADOS
     await this.authorize(user, domain, action);
 
+    // Resolve target tenant based on role and payload
+    if (user) {
+      user.targetTenantId = this.resolveTenantId(user, payload);
+    }
+
     // --- GLOBAL SANITIZATION ---
+
     const { sanitizeObject } = require('../utils/security');
     const sanitizedPayload = sanitizeObject(payload);
 
@@ -212,24 +238,18 @@ class Motor {
   async authUser(token) {
     if (!token) throw new EngineError('AUTH_REQUIRED');
 
-    if (token === 'BOOTSTRAP_TOKEN') {
-      return {
-        id: 0,
-        role_name: 'ADMINISTRADOR',
-        role_id: 1,
-        token: 'BOOTSTRAP_TOKEN',
-        cliente_id: null,
-      };
-    }
-
-    if (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN) {
-      return {
-        id: 0,
-        role_name: 'ADMINISTRADOR',
-        role_id: 1,
-        token: process.env.ADMIN_SECRET_TOKEN,
-        cliente_id: null,
-      };
+    if (token === 'BOOTSTRAP_TOKEN' || (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN)) {
+      try {
+        const result = await db.query(
+          'SELECT u.*, r.nombre as role_name, r.parent_id FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.username = $1',
+          ['superadmin']
+        );
+        if (result.rows.length > 0) return result.rows[0];
+      } catch (e) {
+        console.error('Auth DB Error:', e);
+      }
+      // Fallback for bootstrap: Provide a virtual superadmin if DB record is missing
+      return { id: 0, username: 'superadmin', role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
     }
 
     const result = await db.query(

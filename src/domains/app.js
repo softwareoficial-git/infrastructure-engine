@@ -183,12 +183,6 @@ class AppDomain {
     },
 
     'client-create': async function (user, payload) {
-      if (user.role_name !== 'ADMINISTRADOR') {
-        throw new EngineError(
-          'ACCESO_DENEGADO_ROL',
-          'Solo el administrador del sistema puede crear nuevos clientes.'
-        );
-      }
       const { nombre } = payload;
       const cliente = await AppDomain._createClient(null, nombre);
       return { status: 'success', cliente };

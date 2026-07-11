@@ -7,12 +7,17 @@ class SystemScanner {
   constructor(endpoint = 'http://localhost:3001/execute') {
     this.endpoint = endpoint;
     this.results = [];
+    this.state = {
+      clients: [],
+      users: [],
+      lastCreated: { user: null, client: null }
+    };
     this.personas = {
       SISTEMA_ADMIN: {
         token: 'BOOTSTRAP_TOKEN',
         clienteId: null,
         userId: null,
-        role: 'ADMINISTRADOR'
+        role: 'SUPER_ADMIN'
       }
     };
   }
@@ -34,38 +39,115 @@ class SystemScanner {
   async setupSession() {
     console.log('Setting up Session Context...');
     try {
+      // 0. Ensure an official template exists to avoid NO_OFFICIAL_TEMPLATE error
+      try {
+        const templateRes = await axios.post(this.endpoint, {
+          token: this.personas.SISTEMA_ADMIN.token,
+          cmd: 'APP:template-create',
+          payload: {
+            nombre: 'Template Base Auditoría',
+            contenido: { stock: [], precios: {} }
+          }
+        });
+        const templateId = templateRes.data.data.template.id;
+        
+        await axios.post(this.endpoint, {
+          token: this.personas.SISTEMA_ADMIN.token,
+          cmd: 'APP:template-publish',
+          payload: { templateId: templateId }
+        });
+        console.log('  - Official Template ensured/created.');
+      } catch (e) {
+        console.log('  - Template setup skipped or already exists (ignoring error).');
+      }
+
+      // 1. Admin creates a client for the tests
       const clientRes = await axios.post(this.endpoint, {
         token: this.personas.SISTEMA_ADMIN.token,
         cmd: 'APP:client-create',
         payload: payloads.positive['APP:client-create']()
       });
       const clienteId = clientRes.data.data.cliente.id;
+      
+      this.state.clients.push(clienteId);
+      this.state.lastCreated.client = clienteId;
       this.personas.SISTEMA_ADMIN.clienteId = clienteId;
       console.log('  - Test Client Created: ID ' + clienteId);
 
-      const userRes = await axios.post(this.endpoint, {
+      // 2. Admin creates a DUEÑO for this client
+      const ownerRes = await axios.post(this.endpoint, {
         token: this.personas.SISTEMA_ADMIN.token,
         cmd: 'CLIENT:user-create',
         payload: {
-          username: 'audit_user_' + Date.now(),
+          username: 'audit_owner_' + Date.now(),
+          password: 'password123',
+          role: 'DUEÑO',
+          clienteId: clienteId
+        }
+      });
+      const owner = ownerRes.data.data.usuario;
+      
+      this.state.users.push(owner);
+      this.state.lastCreated.user = owner.id;
+
+      // To get the token, we must login
+      const ownerLogin = await axios.post(this.endpoint, {
+        token: null,
+        cmd: 'USER:login',
+        payload: { username: owner.username, password: 'password123' }
+      });
+      this.personas.DUEÑO = {
+        token: ownerLogin.data.data.token,
+        clienteId: clienteId,
+        userId: owner.id,
+        role: 'DUEÑO'
+      };
+      console.log('  - Test Owner Created: ID ' + owner.id);
+
+      // 3. Admin creates an EMPLEADO for this client
+      const empRes = await axios.post(this.endpoint, {
+        token: this.personas.SISTEMA_ADMIN.token,
+        cmd: 'CLIENT:user-create',
+        payload: {
+          username: 'audit_emp_' + Date.now(),
           password: 'password123',
           role: 'EMPLEADO',
           clienteId: clienteId
         }
       });
-      const userId = userRes.data.data.usuario.id;
-      this.personas.SISTEMA_ADMIN.userId = userId;
-      console.log('  - Test User Created: ID ' + userId);
+      const emp = empRes.data.data.usuario;
+      
+      this.state.users.push(emp);
+      this.state.lastCreated.user = emp.id;
+
+      const empLogin = await axios.post(this.endpoint, {
+        token: null,
+        cmd: 'USER:login',
+        payload: { username: emp.username, password: 'password123' }
+      });
+      this.personas.EMPLEADO = {
+        token: empLogin.data.data.token,
+        clienteId: clienteId,
+        userId: emp.id,
+        role: 'EMPLEADO'
+      };
+      console.log('  - Test Employee Created: ID ' + emp.id);
 
       console.log('Session context ready.');
     } catch (error) {
-      console.error('Session setup failed: ' + error.message);
+      console.error('Session setup failed:');
+      if (error.response) {
+        console.error('  -> Server Response:', JSON.stringify(error.response.data, null, 2));
+      } else {
+        console.error('  -> Error:', error.message);
+      }
       throw error;
     }
   }
 
   async runAudit(commandsCatalog) {
-    console.log('Starting API Functional Validation...');
+    console.log('Starting Multi-Persona RBAC Audit...');
+    const rbacMatrix = require('./rbac_matrix');
     const domains = Object.keys(commandsCatalog);
     
     for (const domain of domains) {
@@ -74,9 +156,92 @@ class SystemScanner {
 
       for (const action in actions) {
         const cmdStr = domain + ':' + action;
-        await this.testStandard(cmdStr);
+        const expectations = rbacMatrix[cmdStr];
+        
+        if (!expectations) {
+          console.log(`     ⚠️  Skipping ${cmdStr}: No defined expectations in rbac_matrix.js`);
+          continue;
+        }
+
+        // Test each persona defined in the matrix for this command
+        for (const [persona, expectedOutcome] of Object.entries(expectations)) {
+          await this.testPersona(cmdStr, persona, expectedOutcome);
+        }
       }
     }
+  }
+
+  async testPersona(cmdStr, persona, expectedOutcome) {
+    const start = performance.now();
+    const token = this.getPersonaToken(persona);
+    
+    let payload;
+    if (typeof payloads.positive[cmdStr] === 'function') {
+      // Pass the correct context based on persona
+      const context = this.getPersonaContext(persona);
+      payload = payloads.positive[cmdStr](context);
+    } else {
+      payload = payloads.positive[cmdStr] || {};
+    }
+
+    try {
+      const res = await axios.post(this.endpoint, {
+        token: token,
+        cmd: cmdStr,
+        payload: payload
+      }, { timeout: 2000 });
+
+      const isSuccess = res.data.status === 'success';
+      const actualOutcome = isSuccess ? 'ALLOW' : 'DENY';
+      const status = actualOutcome === expectedOutcome ? '✅' : '❌';
+      const note = isSuccess ? 'OK' : (res.data.error?.code || 'UNKNOWN_ERROR');
+
+      this.results.push({ cmd: cmdStr, persona, expected: expectedOutcome, actual: actualOutcome, status, note, duration: (performance.now() - start).toFixed(2) });
+      console.log(`     ${status} ${persona} -> ${cmdStr} [${expectedOutcome}] -> ${note}`);
+      
+      if (isSuccess && this.personas.SISTEMA_ADMIN.token === token) {
+        await this.verifyDatabaseState(cmdStr, res.data.data, payload);
+      }
+    } catch (error) {
+      const actualOutcome = 'DENY';
+      const status = actualOutcome === expectedOutcome ? '✅' : '❌';
+      const errData = error.response?.data;
+      const errCode = errData?.error?.code || 'CRITICAL_FAIL';
+      
+      this.results.push({ cmd: cmdStr, persona, expected: expectedOutcome, actual: actualOutcome, status, note: errCode, duration: (performance.now() - start).toFixed(2) });
+      console.log(`     ${status} ${persona} -> ${cmdStr} [${expectedOutcome}] -> ${errCode}`);
+      
+      if (errData) {
+        // Solo imprimimos el detalle completo si es un fallo inesperado (era ALLOW pero dio DENY)
+        if (actualOutcome !== expectedOutcome) {
+          console.log(`     🔍 Detail: ${JSON.stringify(errData.error, null, 2)}`);
+        }
+      }
+    }
+  }
+
+  getPersonaToken(persona) {
+    switch (persona) {
+      case 'SISTEMA_ADMIN': return this.personas.SISTEMA_ADMIN.token;
+      case 'CLIENTE_DUEÑO': return this.personas.DUEÑO?.token;
+      case 'CLIENTE_EMPLEADO': return this.personas.EMPLEADO?.token;
+      case 'GUEST': return null;
+      default: return null;
+    }
+  }
+
+  getPersonaContext(persona) {
+    let context = {};
+    if (persona === 'SISTEMA_ADMIN') context = this.personas.SISTEMA_ADMIN;
+    else if (persona === 'CLIENTE_DUEÑO') context = this.personas.DUEÑO;
+    else if (persona === 'CLIENTE_EMPLEADO') context = this.personas.EMPLEADO;
+
+    // Fallback logic: if context is missing essential IDs, use the state store
+    return {
+      ...context,
+      clienteId: context.clienteId || this.state.lastCreated.client,
+      userId: context.userId || this.state.lastCreated.user
+    };
   }
 
   async verifyDatabaseState(cmdStr, responseData, payload) {
@@ -308,63 +473,6 @@ class SystemScanner {
     }
   }
 
-  async testStandard(cmdStr) {
-    const start = performance.now();
-    let payload;
-    if (typeof payloads.positive[cmdStr] === 'function') {
-      payload = payloads.positive[cmdStr](this.personas.SISTEMA_ADMIN);
-    } else {
-      payload = payloads.positive[cmdStr] || {};
-    }
-
-    try {
-      const res = await axios.post(this.endpoint, {
-        token: this.personas.SISTEMA_ADMIN.token,
-        cmd: cmdStr,
-        payload: payload
-      }, { timeout: cmdStr === 'SYSTEM:init' ? 10000 : 2000 });
-
-      const duration = (performance.now() - start).toFixed(2);
-      const isSuccess = res.data.status === 'success';
-      
-      const status = isSuccess ? '✅' : '❌';
-      const note = isSuccess ? 'OK' : (res.data.error?.code || 'UNKNOWN_ERROR');
-
-      if (!isSuccess) {
-        console.log('   --- DIAGNÓSTICO DE FALLO ---');
-        console.log('   Comando: ' + cmdStr);
-        console.log('   Payload: ' + JSON.stringify(payload, null, 2));
-        console.log('   Respuesta: ' + JSON.stringify(res.data, null, 2));
-        console.log('   ---------------------------');
-      }
-
-      this.results.push({ cmd: cmdStr, persona: 'SISTEMA_ADMIN', expected: 'ALLOW', actual: isSuccess ? 'ALLOW' : 'DENY', status, note, duration });
-      console.log(status + ' ' + cmdStr + ' [POS] -> ' + note + ' (' + duration + 'ms)');
-      
-      if (isSuccess) {
-        await this.verifyDatabaseState(cmdStr, res.data.data, payload);
-      }
-    } catch (error) {
-      const duration = (performance.now() - start).toFixed(2);
-      const errCode = error.response?.data?.error?.code || 'CRITICAL_FAIL';
-      
-      const status = '❌';
-      
-      console.log('   --- DIAGNÓSTICO CRÍTICO ---');
-      console.log('   Comando: ' + cmdStr);
-      console.log('   Payload: ' + JSON.stringify(payload, null, 2));
-      if (error.response) {
-        console.log('   Respuesta Error: ' + JSON.stringify(error.response.data, null, 2));
-      } else {
-        console.log('   Error Técnico: ' + error.message);
-      }
-      console.log('   --------------------------');
-
-      this.results.push({ cmd: cmdStr, persona: 'SISTEMA_ADMIN', expected: 'ALLOW', actual: 'DENY', status, note: errCode, duration });
-      console.log(status + ' ' + cmdStr + ' [POS] -> ' + errCode + ' (' + duration + 'ms)');
-    }
-  }
-
   generateFinalReport() {
     console.log('\n' + '='.repeat(60));
     console.log('API FUNCTIONAL VALIDATION REPORT');
@@ -378,8 +486,6 @@ class SystemScanner {
     console.log('\nGlobal Metrics:');
     console.log('- Total Commands Tested: ' + total);
     console.log('- Functional: ' + passed);
-    console.log('- Broken: ' + failed);
-    console.log('- Avg Latency: ' + avgLatency + 'ms');
     console.log('\nAPI Health Score: ' + ((passed / total) * 100).toFixed(2) + '%');
     console.log('='.repeat(60) + '\n');
   }

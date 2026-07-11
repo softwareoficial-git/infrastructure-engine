@@ -215,79 +215,135 @@ class SystemDomain {
     },
 
     init: async function (user, payload, txClient = null) {
-      console.log('Inicializando base de datos...');
+      console.log('🚀 Iniciando Bootstrapping Resiliente del Sistema...');
       const { hashPassword } = require('../utils/security');
-
       const client = txClient || db;
 
-      // 1. Extensions and Roles
-      await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
-
-      const rolesToCreate = [
-        'SUPER_ADMIN',
-        'CLIENT_ADMIN',
-        'USER',
-        'ADMINISTRADOR',
-        'DUEÑO',
-        'EMPLEADO',
-      ];
-      for (const roleName of rolesToCreate) {
-        await client.query(
-          'INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING',
-          [roleName]
-        );
-      }
-
-      // 2. Base Tables
-      const tables = [
-        `CREATE TABLE IF NOT EXISTS roles (id SERIAL PRIMARY KEY, nombre VARCHAR(50) UNIQUE NOT NULL);`,
-        `CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255) UNIQUE NOT NULL, cliente_id INTEGER);`,
-        `CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT '{}', private_config JSONB DEFAULT '{}', schema_version INTEGER DEFAULT 1);`,
-        `CREATE TABLE IF NOT EXISTS plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT '{}', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false);`,
-        `CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value JSONB NOT NULL);`,
-        `CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`,
-        `CREATE TABLE IF NOT EXISTS logs_trafico (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id INTEGER NOT NULL, visit_type VARCHAR(50), url TEXT, referrer TEXT, user_agent TEXT, language VARCHAR(10), request_id VARCHAR(100), ip_address VARCHAR(45), timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255), browser VARCHAR(50), os VARCHAR(50), device_type VARCHAR(50));`,
-        `CREATE TABLE IF NOT EXISTS geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));`,
-      ];
-
-      for (const sql of tables) {
-        await client.query(sql);
-      }
-
-      // 3. Indexes
-      const indexes = [
-        `CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);`,
-        `CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id);`,
-        `CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);`,
-        `CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);`,
-        `CREATE INDEX IF NOT EXISTS idx_trafico_timestamp ON logs_trafico(timestamp);`,
-        `CREATE INDEX IF NOT EXISTS idx_trafico_country ON logs_trafico(country);`,
-        `CREATE INDEX IF NOT EXISTS idx_trafico_type ON logs_trafico(visit_type);`,
-        `CREATE INDEX IF NOT EXISTS idx_geoip_start ON geoip_data(ip_start);`,
-        `CREATE INDEX IF NOT EXISTS idx_geoip_end ON geoip_data(ip_end);`,
-        `CREATE INDEX IF NOT EXISTS idx_clientes_public_config ON clientes USING GIN (public_config jsonb_path_ops);`,
-      ];
-
-      for (const sql of indexes) {
-        await client.query(sql);
-      }
-
-      // 4. Super Admin
-      const adminToken = process.env.ADMIN_SECRET_TOKEN || 'BOOTSTRAP_TOKEN';
-      const adminPasswordHash = await hashPassword('admin123');
-
-      await client.query(
-        `INSERT INTO usuarios (username, password, role_id, token, cliente_id)
-         VALUES ('superadmin', $1, (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN'), $2, NULL)
-         ON CONFLICT (username) DO NOTHING`,
-        [adminPasswordHash, adminToken]
-      );
-
-      return {
-        status: 'success',
-        message: 'Sistema inicializado correctamente',
-        adminToken: adminToken,
+      const tasks = {
+        infra: [
+          {
+            name: 'Instalación de Extensiones',
+            sql: 'CREATE EXTENSION IF NOT EXISTS "pgcrypto";',
+            critical: false
+          }
+        ],
+        schema: [
+          {
+            name: 'Tabla de Roles',
+            sql: 'CREATE TABLE IF NOT EXISTS roles (id SERIAL PRIMARY KEY, nombre VARCHAR(50) UNIQUE NOT NULL, parent_id INTEGER REFERENCES roles(id));'
+          },
+          {
+            name: 'Tabla de Usuarios',
+            sql: 'CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255) UNIQUE NOT NULL, cliente_id INTEGER, permisos JSONB DEFAULT \'[]\');'
+          },
+          {
+            name: 'Tabla de Clientes',
+            sql: 'CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT \'{}\', private_config JSONB DEFAULT \'{}\', schema_version INTEGER DEFAULT 1);'
+          },
+          {
+            name: 'Tabla de Plantillas',
+            sql: 'CREATE TABLE IF NOT EXISTS plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT \'{}\', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false);'
+          },
+          {
+            name: 'Tabla de Settings',
+            sql: 'CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value JSONB NOT NULL);'
+          },
+          {
+            name: 'Tabla de Eventos',
+            sql: 'CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT \'{}\', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);'
+          },
+          {
+            name: 'Tabla de Tráfico',
+            sql: 'CREATE TABLE IF NOT EXISTS logs_trafico (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id INTEGER NOT NULL, visit_type VARCHAR(50), url TEXT, referrer TEXT, user_agent TEXT, language VARCHAR(10), request_id VARCHAR(100), ip_address VARCHAR(45), timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255), browser VARCHAR(50), os VARCHAR(50), device_type VARCHAR(50));'
+          },
+          {
+            name: 'Tabla de GeoIP',
+            sql: 'CREATE TABLE IF NOT EXISTS geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));'
+          },
+          {
+            name: 'Índices de Optimización',
+            sql: `
+              CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);
+              CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id);
+              CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);
+              CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);
+              CREATE INDEX IF NOT EXISTS idx_trafico_timestamp ON logs_trafico(timestamp);
+              CREATE INDEX IF NOT EXISTS idx_trafico_country ON logs_trafico(country);
+              CREATE INDEX IF NOT EXISTS idx_trafico_type ON logs_trafico(visit_type);
+              CREATE INDEX IF NOT EXISTS idx_geoip_start ON geoip_data(ip_start);
+              CREATE INDEX IF NOT EXISTS idx_geoip_end ON geoip_data(ip_end);
+              CREATE INDEX IF NOT EXISTS idx_clientes_public_config ON clientes USING GIN (public_config jsonb_path_ops);
+            `
+          }
+        ],
+        data: [
+          {
+            name: 'Roles Base',
+            fn: async (cl) => {
+              const rolesToCreate = ['SUPER_ADMIN', 'ADMINISTRADOR', 'DUEÑO', 'EMPLEADO'];
+              for (const roleName of rolesToCreate) {
+                await cl.query('INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', [roleName]);
+              }
+            }
+          },
+          {
+            name: 'Usuario Super Admin',
+            fn: async (cl) => {
+              const adminToken = process.env.ADMIN_SECRET_TOKEN || 'BOOTSTRAP_TOKEN';
+              const adminPasswordHash = await hashPassword('admin123');
+              await cl.query(
+                `INSERT INTO usuarios (username, password, role_id, token, cliente_id)
+                 VALUES ('superadmin', $1, (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN'), $2, NULL)
+                 ON CONFLICT (username) DO NOTHING`,
+                [adminPasswordHash, adminToken]
+              );
+            }
+          }
+        ]
       };
+
+      try {
+        // 1. Ejecutar Infraestructura
+        for (const task of tasks.infra) {
+          try {
+            await client.query(task.sql);
+            console.log(`✅ Infra: ${task.name} completado.`);
+          } catch (e) {
+            if (task.critical) throw new EngineError('BOOTSTRAP_CRITICAL', `Fallo en infraestructura: ${task.name} - ${e.message}`);
+            console.warn(`⚠️ Infra: ${task.name} omitido (${e.message})`);
+          }
+        }
+
+        // 2. Ejecutar Esquema
+        for (const task of tasks.schema) {
+          try {
+            await client.query(task.sql);
+            console.log(`✅ Schema: ${task.name} completado.`);
+          } catch (e) {
+            throw new EngineError('BOOTSTRAP_SCHEMA_ERROR', `Fallo en esquema: ${task.name} - ${e.message}`);
+          }
+        }
+
+        // 3. Ejecutar Datos
+        for (const task of tasks.data) {
+          try {
+            await task.fn(client);
+            console.log(`✅ Data: ${task.name} completado.`);
+          } catch (e) {
+            throw new EngineError('BOOTSTRAP_DATA_ERROR', `Fallo en datos: ${task.name} - ${e.message}`);
+          }
+        }
+
+        return {
+          status: 'success',
+          message: 'Sistema inicializado correctamente con bootstrapping resiliente',
+          adminToken: process.env.ADMIN_SECRET_TOKEN || 'BOOTSTRAP_TOKEN',
+        };
+      } catch (error) {
+        if (error instanceof EngineError) throw error;
+        console.error('❌ Error no manejado durante el bootstrapping:', error);
+        throw new EngineError('BOOTSTRAP_FATAL', `Error inesperado en inicialización: ${error.message}`);
+      }
     },
 
     'list-commands': async function () {
@@ -419,9 +475,9 @@ class SystemDomain {
 
     'events-stats': async function (user, payload, txClient = null) {
       const { rangeDays = 7 } = payload;
-      const tenantId = user.role_name === 'ADMINISTRADOR' ? payload.tenantId : user.cliente_id;
+      const tenantId = user.targetTenantId;
 
-      if (!tenantId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Tenant no identificado.');
+      if (tenantId === undefined || tenantId === null) throw new EngineError('ACCESO_DENEGADO_ROL', 'Tenant no identificado.');
 
       const query = `
         SELECT
@@ -499,6 +555,12 @@ class SystemDomain {
       await (txClient || db).query(`
         CREATE TABLE IF NOT EXISTS system_events_archive (LIKE system_events INCLUDING ALL)
       `);
+      
+      // Ensure payload column is jsonb in case table was created as text in old versions
+      await (txClient || db).query(`
+        ALTER TABLE system_events_archive 
+        ALTER COLUMN payload TYPE JSONB USING payload::jsonb
+      `).catch(() => {}); // Ignore if already jsonb or fails for other reasons
 
       const moveResult = await (txClient || db).query(
         `
@@ -507,7 +569,14 @@ class SystemDomain {
           WHERE tenant_id = $1 AND created_at < CURRENT_DATE - interval '${olderThanDays} days'
           RETURNING *
         )
-        INSERT INTO system_events_archive SELECT * FROM moved_rows
+        INSERT INTO system_events_archive (
+          tenant_id, user_id, command, status, error_code, source, 
+          ip_address, user_agent, app_id, request_id, payload, created_at
+        )
+        SELECT 
+          tenant_id, user_id, command, status, error_code, source, 
+          ip_address, user_agent, app_id, request_id, payload::jsonb, created_at 
+        FROM moved_rows
       `,
         [tenantId]
       );

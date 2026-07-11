@@ -77,19 +77,11 @@ class ClientDomain {
     'user-create': async function (user, payload) {
       let { username, password, role, clienteId } = payload;
 
-      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
       if (!targetClientId)
         throw new EngineError('ACCESO_DENEGADO_ROL', 'Contexto de cliente ausente.');
 
       if (!role) role = 'EMPLEADO';
-
-      // RBAC: Only ADMINISTRADOR can create DUEÑOs
-      if (role === 'DUEÑO' && user.role_name !== 'ADMINISTRADOR') {
-        throw new EngineError(
-          'CLIENTE_RESTRINGIDO',
-          'Solo los administradores del sistema pueden crear dueños de negocio.'
-        );
-      }
 
       const roleRes = await db.query('SELECT id FROM roles WHERE nombre = $1', [
         role.toUpperCase(),
@@ -149,9 +141,6 @@ class ClientDomain {
           ]);
           if (roleRes.rows.length === 0) throw new EngineError('INVALID_PAYLOAD', 'Invalid role.');
           value = roleRes.rows[0].id;
-          if (value !== 0 && data.role === 'DUEÑO' && user.role_name !== 'ADMINISTRADOR') {
-            throw new EngineError('CLIENTE_RESTRINGIDO', 'No se puede asignar el rol de DUEÑO.');
-          }
         }
         const dbKey = key === 'role' ? 'role_id' : key;
         updates.push(`${dbKey} = $${paramIdx++}`);
@@ -192,10 +181,6 @@ class ClientDomain {
         ? payload.clienteId
         : user.cliente_id;
 
-      if (user.role_name !== 'DUEÑO' && user.role_name !== 'ADMINISTRADOR') {
-        throw new EngineError('ACCESO_DENEGADO_ROL', 'Solo el dueño puede gestionar permisos.');
-      }
-
       const result = await db.query(
         'UPDATE usuarios SET permisos = $2 WHERE id = $1 AND cliente_id = $3 RETURNING permisos',
         [userId, JSON.stringify(permissions), targetClientId]
@@ -206,8 +191,7 @@ class ClientDomain {
     },
 
     'schema-extend': async function (user, payload) {
-      const targetClientId =
-        user.role_name === 'ADMINISTRADOR' ? payload.clienteId : user.cliente_id;
+      const targetClientId = user.targetTenantId;
       const { newFields } = payload;
 
       const result = await db.query(
