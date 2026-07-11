@@ -1,5 +1,6 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
+const { EngineError } = require('../core/errors');
 
 class SystemDomain {
   static domain = 'SYSTEM';
@@ -26,8 +27,8 @@ class SystemDomain {
     'log-event': {
       type: 'object',
       properties: {
-        tenantId: { type: 'integer' },
-        userId: { type: 'integer' },
+        tenantId: { type: ['integer', 'null'] },
+        userId: { type: ['integer', 'null'] },
         command: { type: 'string' },
         status: { type: 'string', enum: ['SUCCESS', 'ERROR'] },
         errorCode: { type: 'string' },
@@ -44,7 +45,7 @@ class SystemDomain {
       type: 'object',
       properties: {
         tenantId: { type: ['integer', 'null'] },
-        userId: { type: 'integer' },
+        userId: { type: ['integer', 'null'] },
         startDate: { type: 'string', format: 'date-time' },
         endDate: { type: 'string', format: 'date-time' },
         limit: { type: 'integer', default: 50 },
@@ -55,7 +56,7 @@ class SystemDomain {
     'events-filter': {
       type: 'object',
       properties: {
-        tenantId: { type: 'integer' },
+        tenantId: { type: ['integer', 'null'] },
         source: { type: 'string' },
         command: { type: 'string' },
         status: { type: 'string' },
@@ -63,47 +64,47 @@ class SystemDomain {
         ip_address: { type: 'string' },
         searchTerm: { type: 'string' },
       },
-      required: ['tenantId'],
+      required: [],
     },
     'events-stats': {
       type: 'object',
       properties: {
-        tenantId: { type: 'integer' },
+        tenantId: { type: ['integer', 'null'] },
         rangeDays: { type: 'integer', default: 7 },
       },
-      required: ['tenantId'],
+      required: [],
     },
     'events-top-errors': {
       type: 'object',
       properties: {
-        tenantId: { type: 'integer' },
+        tenantId: { type: ['integer', 'null'] },
         limit: { type: 'integer', default: 5 },
       },
-      required: ['tenantId'],
+      required: [],
     },
     'events-user-activity': {
       type: 'object',
       properties: {
-        userId: { type: 'integer' },
+        userId: { type: ['integer', 'null'] },
         limit: { type: 'integer', default: 10 },
       },
-      required: ['userId'],
+      required: [],
     },
     'events-clear': {
       type: 'object',
       properties: {
-        tenantId: { type: 'integer' },
+        tenantId: { type: ['integer', 'null'] },
         olderThanDays: { type: 'integer' },
       },
-      required: ['tenantId', 'olderThanDays'],
+      required: [],
     },
     'events-archive': {
       type: 'object',
       properties: {
-        tenantId: { type: 'integer' },
+        tenantId: { type: ['integer', 'null'] },
         olderThanDays: { type: 'integer' },
       },
-      required: ['tenantId', 'olderThanDays'],
+      required: [],
     },
     'clear-all': {
       type: 'object',
@@ -128,7 +129,7 @@ class SystemDomain {
     batch: {
       description:
         'Executes multiple commands atomically in a single transaction. If one fails, all are rolled back.',
-      errors: ['BATCH_ERROR', 'CMD_NOT_FOUND', 'INVALID_PAYLOAD', 'FORBIDDEN'],
+      errors: ['BATCH_ERROR', 'CMD_NOT_FOUND', 'INVALID_PAYLOAD', 'ACCESO_DENEGADO_ROL'],
     },
     'list-commands': {
       description: 'Returns a full catalog of all available domains and commands.',
@@ -217,148 +218,74 @@ class SystemDomain {
       console.log('Inicializando base de datos...');
       const { hashPassword } = require('../utils/security');
 
-      // Ensure UUID extension is available
-      await (txClient || db).query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+      const client = txClient || db;
 
-      // 1. Crear Tablas Base
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS roles (
-          id SERIAL PRIMARY KEY,
-          nombre VARCHAR(50) UNIQUE NOT NULL
-        );
-      `);
+      // 1. Extensions and Roles
+      await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
 
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS usuarios (
-          id SERIAL PRIMARY KEY,
-          username VARCHAR(100) UNIQUE NOT NULL,
-          password TEXT NOT NULL,
-          role_id INTEGER REFERENCES roles(id),
-          token VARCHAR(255) UNIQUE NOT NULL,
-          cliente_id INTEGER
-        );
-      `);
-
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS clientes (
-          id SERIAL PRIMARY KEY,
-          nombre VARCHAR(255) NOT NULL,
-          public_config JSONB DEFAULT '{}',
-          private_config JSONB DEFAULT '{}',
-          schema_version INTEGER DEFAULT 1
-        );
-      `);
-
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS plantillas (
-          id SERIAL PRIMARY KEY,
-          nombre VARCHAR(100) NOT NULL,
-          contenido JSONB DEFAULT '{}',
-          version INTEGER DEFAULT 1,
-          es_oficial BOOLEAN DEFAULT false
-        );
-      `);
-
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS system_settings (
-          key VARCHAR(100) PRIMARY KEY,
-          value JSONB NOT NULL
-        );
-      `);
-
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS system_events (
-          id SERIAL PRIMARY KEY,
-          tenant_id INTEGER,
-          user_id INTEGER,
-          command VARCHAR(100),
-          status VARCHAR(20),
-          error_code VARCHAR(50),
-          source VARCHAR(50),
-          ip_address VARCHAR(45),
-          user_agent TEXT,
-          app_id VARCHAR(100),
-          request_id VARCHAR(100),
-          payload JSONB DEFAULT '{}',
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS logs_trafico (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          tenant_id INTEGER NOT NULL,
-          visit_type VARCHAR(50),
-          url TEXT,
-          referrer TEXT,
-          user_agent TEXT,
-          language VARCHAR(10),
-          request_id VARCHAR(100),
-          ip_address VARCHAR(45),
-          timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          country VARCHAR(100),
-          city VARCHAR(100),
-          isp VARCHAR(255),
-          browser VARCHAR(50),
-          os VARCHAR(50),
-          device_type VARCHAR(50)
-        );
-      `);
-
-      await (txClient || db).query(`
-        CREATE TABLE IF NOT EXISTS geoip_data (
-          id SERIAL PRIMARY KEY,
-          ip_start INET NOT NULL,
-          ip_end INET NOT NULL,
-          country VARCHAR(100),
-          city VARCHAR(100),
-          isp VARCHAR(255)
-        );
-      `);
-
-      await (txClient || db).query(`
-        CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);
-        CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id);
-        CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);
-        CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);
-      `);
-
-      await (txClient || db).query(`
-        CREATE INDEX IF NOT EXISTS idx_trafico_timestamp ON logs_trafico(timestamp);
-        CREATE INDEX IF NOT EXISTS idx_trafico_country ON logs_trafico(country);
-        CREATE INDEX IF NOT EXISTS idx_trafico_type ON logs_trafico(visit_type);
-        CREATE INDEX IF NOT EXISTS idx_geoip_start ON geoip_data(ip_start);
-        CREATE INDEX IF NOT EXISTS idx_geoip_end ON geoip_data(ip_end);
-      `);
-
-      await (txClient || db).query(`
-        CREATE INDEX IF NOT EXISTS idx_clientes_public_config
-        ON clientes USING GIN (public_config jsonb_path_ops);
-      `);
-
-      // 2. Cargar Roles Planos
-      const rolesToCreate = ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'];
+      const rolesToCreate = [
+        'SUPER_ADMIN',
+        'CLIENT_ADMIN',
+        'USER',
+        'ADMINISTRADOR',
+        'DUEÑO',
+        'EMPLEADO',
+      ];
       for (const roleName of rolesToCreate) {
-        await (txClient || db).query(
+        await client.query(
           'INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING',
           [roleName]
         );
       }
 
-      // 3. Crear Super Admin Inicial
+      // 2. Base Tables
+      const tables = [
+        `CREATE TABLE IF NOT EXISTS roles (id SERIAL PRIMARY KEY, nombre VARCHAR(50) UNIQUE NOT NULL);`,
+        `CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255) UNIQUE NOT NULL, cliente_id INTEGER);`,
+        `CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT '{}', private_config JSONB DEFAULT '{}', schema_version INTEGER DEFAULT 1);`,
+        `CREATE TABLE IF NOT EXISTS plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT '{}', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false);`,
+        `CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value JSONB NOT NULL);`,
+        `CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`,
+        `CREATE TABLE IF NOT EXISTS logs_trafico (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id INTEGER NOT NULL, visit_type VARCHAR(50), url TEXT, referrer TEXT, user_agent TEXT, language VARCHAR(10), request_id VARCHAR(100), ip_address VARCHAR(45), timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255), browser VARCHAR(50), os VARCHAR(50), device_type VARCHAR(50));`,
+        `CREATE TABLE IF NOT EXISTS geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));`,
+      ];
+
+      for (const sql of tables) {
+        await client.query(sql);
+      }
+
+      // 3. Indexes
+      const indexes = [
+        `CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);`,
+        `CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id);`,
+        `CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at);`,
+        `CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);`,
+        `CREATE INDEX IF NOT EXISTS idx_trafico_timestamp ON logs_trafico(timestamp);`,
+        `CREATE INDEX IF NOT EXISTS idx_trafico_country ON logs_trafico(country);`,
+        `CREATE INDEX IF NOT EXISTS idx_trafico_type ON logs_trafico(visit_type);`,
+        `CREATE INDEX IF NOT EXISTS idx_geoip_start ON geoip_data(ip_start);`,
+        `CREATE INDEX IF NOT EXISTS idx_geoip_end ON geoip_data(ip_end);`,
+        `CREATE INDEX IF NOT EXISTS idx_clientes_public_config ON clientes USING GIN (public_config jsonb_path_ops);`,
+      ];
+
+      for (const sql of indexes) {
+        await client.query(sql);
+      }
+
+      // 4. Super Admin
       const adminToken = process.env.ADMIN_SECRET_TOKEN || 'BOOTSTRAP_TOKEN';
       const adminPasswordHash = await hashPassword('admin123');
 
-      await (txClient || db).query(
-        `INSERT INTO usuarios (username, password, role_id, token)
-         VALUES ('superadmin', $1, (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN'), $2)
+      await client.query(
+        `INSERT INTO usuarios (username, password, role_id, token, cliente_id)
+         VALUES ('superadmin', $1, (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN'), $2, NULL)
          ON CONFLICT (username) DO NOTHING`,
         [adminPasswordHash, adminToken]
       );
 
       return {
         status: 'success',
-        message: 'Sistema inicializado correctamente con roles planos',
+        message: 'Sistema inicializado correctamente',
         adminToken: adminToken,
       };
     },
@@ -489,8 +416,12 @@ class SystemDomain {
       const result = await (txClient || db).query(query, params);
       return { status: 'success', events: result.rows };
     },
-    'events-stats': async function (user, payload) {
-      const { tenantId, rangeDays = 7 } = payload;
+
+    'events-stats': async function (user, payload, txClient = null) {
+      const { rangeDays = 7 } = payload;
+      const tenantId = user.role_name === 'ADMINISTRADOR' ? payload.tenantId : user.cliente_id;
+
+      if (!tenantId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Tenant no identificado.');
 
       const query = `
         SELECT
@@ -499,10 +430,10 @@ class SystemDomain {
           count(*) FILTER (WHERE status = 'ERROR') as error_count,
           (count(*) FILTER (WHERE status = 'SUCCESS') * 100.0 / NULLIF(count(*), 0)) as success_rate
         FROM system_events
-        WHERE tenant_id = $1 AND created_at >= CURRENT_DATE - interval '${rangeDays} days'
+        WHERE tenant_id = $1 AND created_at >= CURRENT_DATE - (CAST($2 AS TEXT) || ' days')::interval
       `;
 
-      const result = await db.query(query, [tenantId]);
+      const result = await (txClient || db).query(query, [tenantId, rangeDays]);
       const stats = result.rows[0];
 
       const topErrorQuery = `
@@ -511,7 +442,7 @@ class SystemDomain {
         WHERE tenant_id = $1 AND status = 'ERROR'
         GROUP BY error_code ORDER BY count DESC LIMIT 1
       `;
-      const topErrorRes = await db.query(topErrorQuery, [tenantId]);
+      const topErrorRes = await (txClient || db).query(topErrorQuery, [tenantId]);
 
       return {
         status: 'success',
@@ -679,6 +610,47 @@ class SystemDomain {
         `);
         await client.query('UPDATE clientes SET schema_version = 6');
         console.log('✅ Migration v6 completed.');
+      }
+
+      if (currentVersion < 7 && targetVersion >= 7) {
+        console.log('Applying Migration v7: Spanish Roles and Hierarchical Permissions...');
+
+        // 1. Create new roles
+        const roles = ['ADMINISTRADOR', 'DUEÑO', 'EMPLEADO'];
+        for (const role of roles) {
+          await client.query(
+            'INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING',
+            [role]
+          );
+        }
+
+        // 2. Map old roles to new ones
+        await client.query(`
+          UPDATE usuarios
+          SET role_id = (SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR')
+          WHERE role_id = (SELECT id FROM roles WHERE nombre = 'SUPER_ADMIN')
+        `);
+        await client.query(`
+          UPDATE usuarios
+          SET role_id = (SELECT id FROM roles WHERE nombre = 'DUEÑO')
+          WHERE role_id = (SELECT id FROM roles WHERE nombre = 'CLIENT_ADMIN')
+        `);
+        await client.query(`
+          UPDATE usuarios
+          SET role_id = (SELECT id FROM roles WHERE nombre = 'EMPLEADO')
+          WHERE role_id = (SELECT id FROM roles WHERE nombre = 'USER')
+        `);
+
+        // 3. Add permissions column to usuarios
+        await client.query(
+          "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos JSONB DEFAULT '[]'"
+        );
+
+        // 4. Cleanup old roles (Skipped to avoid foreign key constraint violations)
+        // await client.query('DELETE FROM roles WHERE nombre IN (\'SUPER_ADMIN\', \'CLIENT_ADMIN\', \'USER\')');
+
+        await client.query('UPDATE clientes SET schema_version = 7');
+        console.log('✅ Migration v7 completed.');
       }
 
       return {

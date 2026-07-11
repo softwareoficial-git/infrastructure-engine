@@ -260,7 +260,13 @@ app.post('/execute', authenticate, async (req, res) => {
         error.message = `The request payload for command '${command}' is incorrect. ${error.details || ''}`;
       }
 
-      if (code === 'FORBIDDEN') statusCode = 403;
+      if (
+        code === 'SISTEMA_RESTRINGIDO' ||
+        code === 'CLIENTE_RESTRINGIDO' ||
+        code === 'ACCESO_DENEGADO_ROL' ||
+        code === 'PERMISO_FALTANTE'
+      )
+        statusCode = 403;
       else if (code === 'CMD_NOT_FOUND') statusCode = 404;
       else if (code === 'INVALID_TOKEN' || code === 'AUTH_REQUIRED') statusCode = 401;
     } else {
@@ -356,7 +362,7 @@ async function startServer() {
 
     if (!tablesCheck.rows[0].exists) {
       console.log('🛠️  Database not initialized. Running SYSTEM:init...');
-      const bootstrapUser = { id: 0, role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
+      const bootstrapUser = { id: 0, role_name: 'ADMINISTRADOR', token: 'BOOTSTRAP_TOKEN' };
       // We call the logic directly from the domain's command via motor.execute
       await motor.execute(bootstrapUser, 'SYSTEM:init', {});
       console.log('✅ System initialized successfully.');
@@ -367,13 +373,13 @@ async function startServer() {
     // 3. Automatic Migration Check
     const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 6; // Updated to v6 for Analytics tables and pgcrypto extension
+    const TARGET_VERSION = 7; // Updated to v7 for Spanish Roles and Hierarchical Permissions
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
       const bootstrapUser = {
         id: 0,
-        role_name: 'SUPER_ADMIN',
+        role_name: 'ADMINISTRADOR',
         role_id: 1,
         token: 'BOOTSTRAP_TOKEN',
       };

@@ -4,22 +4,36 @@
  */
 const ERROR_CATALOG = {
   AUTH_REQUIRED: {
-    message: 'Authentication token is missing.',
-    solution: 'Add the "token" field to the root of your JSON request body.',
+    message: 'Falta el token de autenticación.',
+    solution: 'Añade el campo "token" en la raíz del cuerpo de tu solicitud JSON.',
   },
   INVALID_TOKEN: {
-    message: 'The provided token is invalid or has expired.',
-    solution: 'Verify your token or request a new one from the authentication provider.',
+    message: 'El token proporcionado es inválido o ha expirado.',
+    solution: 'Verifica tu token o solicita uno nuevo al proveedor de autenticación.',
   },
-  FORBIDDEN: {
-    message: 'Access denied: Insufficient permissions for this domain.',
+  SISTEMA_RESTRINGIDO: {
+    message: 'Acceso restringido al dominio del Sistema.',
+    solution: 'Solo el ADMINISTRADOR tiene permisos para ejecutar comandos en el dominio SYSTEM.',
+  },
+  CLIENTE_RESTRINGIDO: {
+    message: 'Acceso restringido a la gestión de Clientes.',
     solution:
-      'Check if your user role has the necessary permissions. If you are a client, you cannot access SYSTEM or APP domains.',
+      'Solo el ADMINISTRADOR o el DUEÑO del negocio pueden realizar cambios en la configuración del cliente.',
+  },
+  ACCESO_DENEGADO_ROL: {
+    message: 'Tu rol actual no tiene acceso a este dominio.',
+    solution:
+      'Contacta con tu administrador para verificar si tu rol debe tener acceso a este módulo.',
+  },
+  PERMISO_FALTANTE: {
+    message: 'Permiso específico no asignado.',
+    solution:
+      'El empleado no tiene habilitada esta función. Solicita al DUEÑO que añada el comando a tu lista de permisos.',
   },
   CMD_NOT_FOUND: {
-    message: 'The requested command was not found.',
+    message: 'El comando solicitado no fue encontrado.',
     solution:
-      'Verify the command format (DOMAIN:action). Check the available commands in the documentation.',
+      'Verifica el formato del comando (DOMINIO:accion). Consulta la documentación para ver los comandos disponibles.',
   },
   INVALID_PAYLOAD: {
     message: 'The request payload does not match the required schema.',

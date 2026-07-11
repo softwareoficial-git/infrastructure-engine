@@ -91,9 +91,9 @@ class UserDomain {
     'get-profile': { description: "Returns the current user's profile.", errors: [] },
     read: {
       description: 'Fetch the full public config.',
-      errors: ['CLIENT_NOT_FOUND', 'FORBIDDEN'],
+      errors: ['CLIENT_NOT_FOUND', 'ACCESO_DENEGADO_ROL'],
     },
-    write: { description: 'Global merge update of the config.', errors: ['FORBIDDEN'] },
+    write: { description: 'Global merge update of the config.', errors: ['ACCESO_DENEGADO_ROL'] },
     'read-path': {
       description: 'Extract a specific value using a path (e.g. "settings.color").',
       errors: ['PATH_NOT_FOUND', 'CLIENT_NOT_FOUND'],
@@ -154,7 +154,7 @@ class UserDomain {
 
     'get-profile': async function (user) {
       const result = await db.query(
-        'SELECT u.id, u.username, r.nombre as role_name, c.nombre as cliente_nombre FROM usuarios u JOIN roles r ON u.role_id = r.id JOIN clientes c ON u.cliente_id = c.id WHERE u.id = $1',
+        'SELECT u.id, u.username, r.nombre as role_name, c.nombre as cliente_nombre FROM usuarios u JOIN roles r ON u.role_id = r.id LEFT JOIN clientes c ON u.cliente_id = c.id WHERE u.id = $1',
         [user.id]
       );
 
@@ -164,7 +164,9 @@ class UserDomain {
 
     read: async function (user, payload) {
       const { clienteId } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+
+      if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Cliente no identificado.');
 
       const result = await db.query('SELECT public_config FROM clientes WHERE id = $1', [
         targetClientId,
@@ -175,7 +177,7 @@ class UserDomain {
 
     write: async function (user, payload) {
       const { clienteId, data } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
 
       const result = await db.query(
         "UPDATE clientes SET public_config = COALESCE(public_config, '{}'::jsonb) || $2 WHERE id = $1 RETURNING public_config",
@@ -187,7 +189,7 @@ class UserDomain {
 
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
@@ -202,7 +204,7 @@ class UserDomain {
 
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
 
       if (path.includes('[') || path.includes(']')) {
         throw new EngineError(
@@ -222,7 +224,7 @@ class UserDomain {
 
     'push-item': async function (user, payload) {
       const { clienteId, path, item } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 
@@ -245,7 +247,7 @@ class UserDomain {
 
     'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 

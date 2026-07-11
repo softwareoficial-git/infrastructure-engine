@@ -10,13 +10,11 @@ class MonitorDomain {
       type: 'object',
       description: 'Obtains general metrics of the entire system.',
       properties: {},
-      additionalProperties: false,
     },
     'get-global-versions': {
       type: 'object',
       description: 'Shows the distribution of schema versions across all clients.',
       properties: {},
-      additionalProperties: false,
     },
     'get-my-version': {
       type: 'object',
@@ -30,7 +28,6 @@ class MonitorDomain {
       type: 'object',
       description: 'Performs a basic health check of the core services.',
       properties: {},
-      additionalProperties: false,
     },
     'get-client-report': {
       type: 'object',
@@ -45,15 +42,15 @@ class MonitorDomain {
   static docs = {
     'get-global-stats': {
       description: 'Returns total count of clients, templates, and users in the system.',
-      errors: ['FORBIDDEN'],
+      errors: ['ACCESO_DENEGADO_ROL'],
     },
     'get-global-versions': {
       description: 'Returns a map of version -> client_count.',
-      errors: ['FORBIDDEN'],
+      errors: ['ACCESO_DENEGADO_ROL'],
     },
     'get-my-version': {
       description: 'Check if a client is up to date with the latest schema.',
-      errors: ['CLIENT_NOT_FOUND', 'FORBIDDEN'],
+      errors: ['CLIENT_NOT_FOUND', 'ACCESO_DENEGADO_ROL'],
     },
     'get-system-health': {
       description: 'Quick check for DB and Engine connectivity.',
@@ -61,7 +58,7 @@ class MonitorDomain {
     },
     'get-client-report': {
       description: 'Detailed analysis of a client: total inventory value, active users, etc.',
-      errors: ['FORBIDDEN', 'CLIENT_NOT_FOUND'],
+      errors: ['ACCESO_DENEGADO_ROL', 'CLIENT_NOT_FOUND'],
     },
   };
 
@@ -103,9 +100,9 @@ class MonitorDomain {
     'get-client-report': async function (user, payload) {
       const { clienteId } = payload;
 
-      // Security check: Only SUPER_ADMIN or the client's own admin/user can see this
-      if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== clienteId) {
-        throw new EngineError('FORBIDDEN');
+      // Security check: Only ADMINISTRADOR or the client's own admin/user can see this
+      if (user.role_name !== 'ADMINISTRADOR' && user.cliente_id !== clienteId) {
+        throw new EngineError('ACCESO_DENEGADO_ROL');
       }
 
       // 1. Basic Info
@@ -158,8 +155,12 @@ class MonitorDomain {
     'get-my-version': async function (user, payload) {
       // Client level: See their own current version
       const { clienteId } = payload;
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+
+      if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL');
+
       const result = await db.query('SELECT schema_version FROM clientes WHERE id = $1', [
-        clienteId,
+        targetClientId,
       ]);
 
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
@@ -170,13 +171,18 @@ class MonitorDomain {
       };
     },
 
-    'get-system-health': async function () {
-      // Basic health check for the engine
+    'get-system-health': async function (user, payload) {
+      const { clienteId } = payload || {};
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+
+      if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Cliente no identificado.');
+
       try {
         await db.query('SELECT 1');
         return {
           status: 'success',
           health: 'healthy',
+          tenant_id: targetClientId,
           checks: {
             database: 'OK',
             engine: 'OK',

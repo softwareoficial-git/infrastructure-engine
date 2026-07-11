@@ -1,6 +1,0 @@
-src/domains/user.js:  static commands = {
-src/domains/system.js:  static commands = {
-src/domains/monitor.js:  static commands = {
-src/domains/app.js:  static commands = {
-src/domains/system_config.js:  static commands = {
-src/domains/client.js:  static commands = {

@@ -12,7 +12,7 @@ class ClientDomain {
       properties: {
         username: { type: 'string', minLength: 1 },
         password: { type: 'string', minLength: 6 },
-        role: { type: 'string', enum: ['CLIENT_ADMIN', 'USER'] },
+        role: { type: 'string', enum: ['DUEÑO', 'EMPLEADO'] },
         clienteId: { type: 'integer' },
       },
       required: ['username', 'password'],
@@ -20,16 +20,16 @@ class ClientDomain {
     'user-read': {
       type: 'object',
       properties: {
-        clienteId: { type: 'integer' },
-        userId: { type: 'string' },
+        clienteId: { type: ['integer', 'null'] },
+        userId: { type: ['integer', 'null'] },
       },
       required: ['userId'],
     },
     'user-update': {
       type: 'object',
       properties: {
-        clienteId: { type: 'integer' },
-        userId: { type: 'string' },
+        clienteId: { type: ['integer', 'null'] },
+        userId: { type: ['integer', 'null'] },
         data: {
           type: 'object',
           properties: {
@@ -77,14 +77,18 @@ class ClientDomain {
     'user-create': async function (user, payload) {
       let { username, password, role, clienteId } = payload;
 
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? clienteId : user.cliente_id;
-      if (!targetClientId) throw new EngineError('FORBIDDEN', 'Client context missing.');
+      const targetClientId = user.role_name === 'ADMINISTRADOR' ? clienteId : user.cliente_id;
+      if (!targetClientId)
+        throw new EngineError('ACCESO_DENEGADO_ROL', 'Contexto de cliente ausente.');
 
-      if (!role) role = 'USER';
+      if (!role) role = 'EMPLEADO';
 
-      // RBAC: Only SUPER_ADMIN can create CLIENT_ADMINs
-      if (role === 'CLIENT_ADMIN' && user.role_name !== 'SUPER_ADMIN') {
-        throw new EngineError('FORBIDDEN', 'Only system admins can create client admins.');
+      // RBAC: Only ADMINISTRADOR can create DUEÑOs
+      if (role === 'DUEÑO' && user.role_name !== 'ADMINISTRADOR') {
+        throw new EngineError(
+          'CLIENTE_RESTRINGIDO',
+          'Solo los administradores del sistema pueden crear dueños de negocio.'
+        );
       }
 
       const roleRes = await db.query('SELECT id FROM roles WHERE nombre = $1', [
@@ -111,7 +115,8 @@ class ClientDomain {
 
     'user-read': async function (user, payload) {
       const { userId } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
+      const targetClientId =
+        user.role_name === 'ADMINISTRADOR' ? payload.clienteId : user.cliente_id;
 
       const result = await db.query(
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1 AND (u.id::text = $2 OR u.username = $2)',
@@ -124,7 +129,8 @@ class ClientDomain {
 
     'user-update': async function (user, payload) {
       const { userId, data } = payload;
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
+      const targetClientId =
+        user.role_name === 'ADMINISTRADOR' ? payload.clienteId : user.cliente_id;
 
       const ALLOWED_FIELDS = ['password', 'role', 'username'];
       const keys = Object.keys(data).filter((key) => ALLOWED_FIELDS.includes(key));
@@ -143,8 +149,8 @@ class ClientDomain {
           ]);
           if (roleRes.rows.length === 0) throw new EngineError('INVALID_PAYLOAD', 'Invalid role.');
           value = roleRes.rows[0].id;
-          if (value !== 0 && data.role === 'CLIENT_ADMIN' && user.role_name !== 'SUPER_ADMIN') {
-            throw new EngineError('FORBIDDEN', 'Cannot assign CLIENT_ADMIN role.');
+          if (value !== 0 && data.role === 'DUEÑO' && user.role_name !== 'ADMINISTRADOR') {
+            throw new EngineError('CLIENTE_RESTRINGIDO', 'No se puede asignar el rol de DUEÑO.');
           }
         }
         const dbKey = key === 'role' ? 'role_id' : key;
@@ -163,7 +169,9 @@ class ClientDomain {
     },
 
     'user-list': async function (user, payload) {
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
+      const targetClientId = ['SUPER_ADMIN', 'ADMINISTRADOR'].includes(user.role_name)
+        ? payload.clienteId
+        : user.cliente_id;
 
       let query =
         'SELECT u.*, r.nombre as role_name FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.cliente_id = $1';
@@ -178,8 +186,28 @@ class ClientDomain {
       return { status: 'success', usuarios: result.rows };
     },
 
+    'user-permissions-update': async function (user, payload) {
+      const { userId, permissions } = payload;
+      const targetClientId = ['SUPER_ADMIN', 'ADMINISTRADOR'].includes(user.role_name)
+        ? payload.clienteId
+        : user.cliente_id;
+
+      if (user.role_name !== 'DUEÑO' && user.role_name !== 'ADMINISTRADOR') {
+        throw new EngineError('ACCESO_DENEGADO_ROL', 'Solo el dueño puede gestionar permisos.');
+      }
+
+      const result = await db.query(
+        'UPDATE usuarios SET permisos = $2 WHERE id = $1 AND cliente_id = $3 RETURNING permisos',
+        [userId, JSON.stringify(permissions), targetClientId]
+      );
+
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
+      return { status: 'success', newPermissions: result.rows[0].permisos };
+    },
+
     'schema-extend': async function (user, payload) {
-      const targetClientId = user.role_name === 'SUPER_ADMIN' ? payload.clienteId : user.cliente_id;
+      const targetClientId =
+        user.role_name === 'ADMINISTRADOR' ? payload.clienteId : user.cliente_id;
       const { newFields } = payload;
 
       const result = await db.query(

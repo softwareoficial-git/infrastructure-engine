@@ -27,14 +27,14 @@ class AnalyticsDomain {
             timestamp: { type: 'string', format: 'date-time' },
           },
         },
-        tenantId: { type: 'string' },
+        tenantId: { type: ['integer', 'null'] },
       },
       required: [],
     },
     'list-visits': {
       type: 'object',
       properties: {
-        tenantId: { type: 'string', description: 'Tenant identifier to filter visits' },
+        tenantId: { type: ['integer', 'null'], description: 'Tenant identifier to filter visits' },
         visit_type: { type: 'string', description: 'Filter by visit type (e.g., page_view)' },
         limit: { type: 'integer', default: 50 },
         offset: { type: 'integer', default: 0 },
@@ -141,8 +141,16 @@ class AnalyticsDomain {
     },
 
     'list-visits': async function (user, payload) {
-      const { tenantId, visit_type, limit = 50, offset = 0 } = payload;
-      const tid = parseInt(tenantId, 10) || 1;
+      let { tenantId, visit_type, limit = 50, offset = 0 } = payload;
+
+      // Tenant Guard: Only ADMINISTRADOR can specify tenantId, others are locked to their own
+      const tid = user.role_name === 'ADMINISTRADOR' ? parseInt(tenantId, 10) : user.cliente_id;
+
+      if (!tid)
+        throw new EngineError(
+          'ACCESO_DENEGADO_ROL',
+          'No se pudo determinar el tenant asociado al usuario.'
+        );
 
       let query = 'SELECT * FROM logs_trafico WHERE tenant_id = $1';
       const params = [tid];

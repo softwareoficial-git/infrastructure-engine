@@ -24,9 +24,17 @@ class AppDomain {
     if (templateRes.rows.length === 0) throw new EngineError('NO_OFFICIAL_TEMPLATE');
     const officialContent = templateRes.rows[0].contenido;
 
+    // Fusionar contenido de la plantilla con la estructura de negocio inicial obligatoria
+    const initialConfig = {
+      ...officialContent,
+      stock: [],
+      sales: [],
+      employees: [],
+    };
+
     const clientRes = await dbClient.query(
       'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
-      [nombre, officialContent, JSON.stringify({ plan: 'free' })]
+      [nombre, initialConfig, JSON.stringify({ plan: 'free' })]
     );
     return clientRes.rows[0];
   }
@@ -98,12 +106,12 @@ class AppDomain {
   static docs = {
     'client-create': {
       description: 'Creates a new client with a default official template and a "free" plan.',
-      errors: ['NO_OFFICIAL_TEMPLATE'],
+      errors: ['NO_OFFICIAL_TEMPLATE', 'ACCESO_DENEGADO_ROL'],
     },
     'update-client-plan': {
       description:
         "Updates a client's subscription plan (e.g., from free to pro) in their private configuration.",
-      errors: ['CLIENT_NOT_FOUND', 'FORBIDDEN'],
+      errors: ['CLIENT_NOT_FOUND', 'ACCESO_DENEGADO_ROL'],
     },
     'template-create': { description: 'Creates a global template.', errors: ['INVALID_PAYLOAD'] },
     'template-publish': {
@@ -175,6 +183,12 @@ class AppDomain {
     },
 
     'client-create': async function (user, payload) {
+      if (user.role_name !== 'ADMINISTRADOR') {
+        throw new EngineError(
+          'ACCESO_DENEGADO_ROL',
+          'Solo el administrador del sistema puede crear nuevos clientes.'
+        );
+      }
       const { nombre } = payload;
       const cliente = await AppDomain._createClient(null, nombre);
       return { status: 'success', cliente };
@@ -261,18 +275,10 @@ class AppDomain {
         // 2. Create Client
         const newCliente = await AppDomain._createClient(client, nombreCliente);
 
-        // 2.1. Automatic Business Initialization (Prevent Blank Slate Problem)
-        await client.query(
-          `UPDATE clientes
-           SET public_config = public_config || '{"stock": [], "sales": [], "employees": []}'::jsonb
-           WHERE id = $1`,
-          [newCliente.id]
-        );
-
-        // 3. Find the 'CLIENTE' role ID
-        const roleRes = await client.query("SELECT id FROM roles WHERE nombre = 'CLIENTE'");
+        // 3. Find the 'DUEÑO' role ID
+        const roleRes = await client.query("SELECT id FROM roles WHERE nombre = 'DUEÑO'");
         if (roleRes.rows.length === 0)
-          throw new EngineError('INTERNAL_ERROR', 'Role CLIENTE not found.');
+          throw new EngineError('INTERNAL_ERROR', 'Role DUEÑO not found.');
         const roleId = roleRes.rows[0].id;
 
         // 4. Create User

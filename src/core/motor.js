@@ -3,7 +3,7 @@ const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 const { EngineError } = require('./errors');
 
-const ajv = new Ajv();
+const ajv = new Ajv({ allErrors: true, removeAdditional: true });
 addFormats(ajv);
 
 function translateAjvErrors(errors) {
@@ -65,33 +65,52 @@ class Motor {
     console.log(`Dominio ${domainName} registrado con ${Object.keys(commands).length} comandos.`);
   }
 
-  async authorize(user, domain) {
+  async authorize(user, domain, action = null) {
     // Allow guest access for specific domains or if user is marked as GUEST
     if (!user || user.role_name === 'GUEST') {
       const publicDomains = ['APP', 'ANALYTICS'];
       if (publicDomains.includes(domain)) {
         return;
       }
-      throw new EngineError('FORBIDDEN');
+      throw new EngineError('ACCESO_DENEGADO_ROL');
     }
 
-    // TRUSTED BOOTSTRAP: If the user is explicitly a SUPER_ADMIN, allow access immediately
-    if (user.role_name === 'SUPER_ADMIN') {
+    // ADMINISTRADOR: Acceso total inmediato
+    if (user.role_name === 'ADMINISTRADOR') {
       return;
     }
 
-    // 2. Define which roles have access to which domains (FLAT HIERARCHY)
+    // Define which roles have access to which domains
     const domainPermissions = {
-      SYSTEM: ['SUPER_ADMIN'],
-      APP: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'],
-      CLIENT: ['SUPER_ADMIN', 'CLIENT_ADMIN'],
-      USER: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'],
-      MONITOR: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'USER'],
+      SYSTEM: ['ADMINISTRADOR'],
+      APP: ['ADMINISTRADOR', 'DUEÑO', 'EMPLEADO', 'CLIENTE'],
+      CLIENT: ['ADMINISTRADOR', 'DUEÑO', 'CLIENTE'],
+      USER: ['ADMINISTRADOR', 'DUEÑO', 'EMPLEADO', 'CLIENTE'],
+      MONITOR: ['ADMINISTRADOR', 'DUEÑO', 'EMPLEADO', 'CLIENTE'],
     };
+
+    if (domain === 'SYSTEM') {
+      throw new EngineError('SISTEMA_RESTRINGIDO');
+    }
+
+    if (domain === 'CLIENT') {
+      if (!domainPermissions[domain].includes(user.role_name)) {
+        throw new EngineError('CLIENTE_RESTRINGIDO');
+      }
+    }
 
     const allowedRoles = domainPermissions[domain] || [];
     if (!allowedRoles.includes(user.role_name)) {
-      throw new EngineError('FORBIDDEN');
+      throw new EngineError('ACCESO_DENEGADO_ROL');
+    }
+
+    // Control granular para EMPLEADOS
+    if (user.role_name === 'EMPLEADO' && action) {
+      const command = `${domain}:${action}`;
+      const permissions = user.permisos || [];
+      if (!permissions.includes(command)) {
+        throw new EngineError('PERMISO_FALTANTE', `Comando: ${command}`);
+      }
     }
   }
 
@@ -114,7 +133,8 @@ class Motor {
 
     const cmdConfig = this.commands[domain][action];
 
-    await this.authorize(user, domain);
+    // Ahora pasamos la acción para permitir el control granular de EMPLEADOS
+    await this.authorize(user, domain, action);
 
     // --- GLOBAL SANITIZATION ---
     const { sanitizeObject } = require('../utils/security');
@@ -129,7 +149,49 @@ class Motor {
       }
     }
 
-    return await cmdConfig.handler(user, sanitizedPayload, txClient);
+    try {
+      const result = await cmdConfig.handler(user, sanitizedPayload, txClient);
+
+      // Auditoría Automática (Con privilegios de sistema)
+      if (commandStr !== 'SYSTEM:log-event') {
+        const adminUser = { id: 0, role_name: 'ADMINISTRADOR' };
+        this.execute(
+          adminUser,
+          'SYSTEM:log-event',
+          {
+            tenantId: user?.cliente_id,
+            userId: user?.id,
+            command: commandStr,
+            status: 'SUCCESS',
+            source: 'BACKEND',
+            payload: sanitizedPayload,
+          },
+          null
+        ).catch((err) => console.error('Audit Error:', err));
+      }
+
+      return result;
+    } catch (error) {
+      // Auditoría de Errores (Con privilegios de sistema)
+      if (commandStr !== 'SYSTEM:log-event') {
+        const adminUser = { id: 0, role_name: 'ADMINISTRADOR' };
+        this.execute(
+          adminUser,
+          'SYSTEM:log-event',
+          {
+            tenantId: user?.cliente_id,
+            userId: user?.id,
+            command: commandStr,
+            status: 'ERROR',
+            errorCode: error.code || 'INTERNAL_ERROR',
+            source: 'BACKEND',
+            payload: sanitizedPayload,
+          },
+          null
+        ).catch((err) => console.error('Audit Error:', err));
+      }
+      throw error;
+    }
   }
 
   listCommands() {
@@ -151,11 +213,23 @@ class Motor {
     if (!token) throw new EngineError('AUTH_REQUIRED');
 
     if (token === 'BOOTSTRAP_TOKEN') {
-      return { id: 0, role_name: 'SUPER_ADMIN', role_id: 1, token: 'BOOTSTRAP_TOKEN' };
+      return {
+        id: 0,
+        role_name: 'ADMINISTRADOR',
+        role_id: 1,
+        token: 'BOOTSTRAP_TOKEN',
+        cliente_id: null,
+      };
     }
 
     if (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN) {
-      return { id: 0, role_name: 'SUPER_ADMIN', role_id: 1, token: process.env.ADMIN_SECRET_TOKEN };
+      return {
+        id: 0,
+        role_name: 'ADMINISTRADOR',
+        role_id: 1,
+        token: process.env.ADMIN_SECRET_TOKEN,
+        cliente_id: null,
+      };
     }
 
     const result = await db.query(
