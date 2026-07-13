@@ -21,7 +21,6 @@ const ROLE_PERMISSIONS = {
   EMPLEADO: [
     'USER:get-profile',
     'USER:read',
-    'USER:write',
     'USER:update-path',
     'USER:push-item',
     'USER:query-json',

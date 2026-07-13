@@ -173,14 +173,11 @@ class UserDomain {
 
     read: async function (user, payload) {
       const { clienteId } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
-        ? clienteId
-        : user.cliente_id;
 
-      if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Cliente no identificado.');
+      if (!clienteId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Cliente no identificado.');
 
       const result = await db.query('SELECT public_config FROM clientes WHERE id = $1', [
-        targetClientId,
+        clienteId,
       ]);
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', data: result.rows[0].public_config };
@@ -188,13 +185,10 @@ class UserDomain {
 
     write: async function (user, payload) {
       const { clienteId, data } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
-        ? clienteId
-        : user.cliente_id;
 
       const result = await db.query(
         "UPDATE clientes SET public_config = COALESCE(public_config, '{}'::jsonb) || $2 WHERE id = $1 RETURNING public_config",
-        [targetClientId, JSON.stringify(data)]
+        [clienteId, JSON.stringify(data)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
@@ -202,14 +196,11 @@ class UserDomain {
 
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
-        ? clienteId
-        : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
         'SELECT public_config #> $2 as value FROM clientes WHERE id = $1',
-        [targetClientId, pgPath]
+        [clienteId, pgPath]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       const value = result.rows[0].value;
@@ -219,9 +210,6 @@ class UserDomain {
 
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
-        ? clienteId
-        : user.cliente_id;
 
       if (path.includes('[') || path.includes(']')) {
         throw new EngineError(
@@ -233,7 +221,7 @@ class UserDomain {
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
         "UPDATE clientes SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config",
-        [targetClientId, pgPath, JSON.stringify(value)]
+        [clienteId, pgPath, JSON.stringify(value)]
       );
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       return { status: 'success', updatedData: result.rows[0].public_config };
@@ -241,9 +229,6 @@ class UserDomain {
 
     'push-item': async function (user, payload) {
       const { clienteId, path, item } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
-        ? clienteId
-        : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 
@@ -257,7 +242,7 @@ class UserDomain {
          )
          WHERE id = $1
          RETURNING public_config`,
-        [targetClientId, pgPath, JSON.stringify([item])]
+        [clienteId, pgPath, JSON.stringify([item])]
       );
 
       if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
@@ -266,9 +251,6 @@ class UserDomain {
 
     'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
-        ? clienteId
-        : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 
@@ -279,7 +261,7 @@ class UserDomain {
         ) sub
         WHERE item @> $3::jsonb
       `;
-      const params = [targetClientId, pgPath, JSON.stringify(filter)];
+      const params = [clienteId, pgPath, JSON.stringify(filter)];
 
       if (limit !== undefined) {
         query += ` LIMIT $${params.length + 1}`;

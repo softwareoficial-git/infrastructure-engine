@@ -76,14 +76,12 @@ class Motor {
       `[AUTH-DEBUG] Validating access: User=${user?.username || 'UNKNOWN'} | Role=${user?.role_name || 'NONE'} | Cmd=${command || 'DOMAIN-ONLY'}`
     );
 
-    // 1. LISTA BLANCA DE COMANDOS PÚBLICOS (Sin Token)
+    // 1. LISTA BLANCA de COMANDOS PÚBLICOS (Sin Token)
     const publicCommands = [
       'APP:self-register',
       'USER:login',
       'ANALYTICS:track-visit',
       'SYSTEM:list-commands',
-      'APP:client-create',
-      'CLIENT:user-create',
     ];
 
     if (command && publicCommands.includes(command)) {
@@ -135,9 +133,15 @@ class Motor {
   resolveTenantId(user, payload) {
     if (!user) return 0;
     const userRole = normalizeRole(user.role_name);
+    
+    // BLINDAJE TOTAL DE AISLAMIENTO (Tenant Isolation):
+    // Solo los administradores globales pueden saltar entre tenants.
+    // Para cualquier usuario de negocio (Dueño, Empleado), el sistema 
+    // ignora cualquier clienteId en el payload y fuerza el uso de su propio cliente_id.
     if (['SUPER_ADMIN', 'ADMINISTRADOR'].includes(userRole)) {
       return payload.clienteId || payload.tenantId || user.cliente_id || 0;
     }
+    
     return user.cliente_id;
   }
 
@@ -171,6 +175,17 @@ class Motor {
 
     const { sanitizeObject } = require('../utils/security');
     const sanitizedPayload = sanitizeObject(payload);
+
+    // FORZADO DE IDENTIDAD: Sobrescribimos cualquier intento de suplantación de clienteId en el payload
+    // con el ID validado y autorizado por el motor.
+    if (user && user.targetTenantId !== undefined) {
+      if (sanitizedPayload.clienteId) {
+        sanitizedPayload.clienteId = user.targetTenantId;
+      }
+      if (sanitizedPayload.tenantId) {
+        sanitizedPayload.tenantId = user.targetTenantId;
+      }
+    }
 
     if (cmdConfig.schema) {
       const validate = ajv.compile(cmdConfig.schema);
