@@ -237,6 +237,10 @@ class SystemDomain {
             sql: 'CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255) UNIQUE NOT NULL, cliente_id INTEGER, permisos JSONB DEFAULT \'[]\');'
           },
           {
+            name: 'Tabla de Sesiones',
+            sql: 'CREATE TABLE IF NOT EXISTS sesiones (id SERIAL PRIMARY KEY, usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE, token VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, expires_at TIMESTAMP WITH TIME ZONE);'
+          },
+          {
             name: 'Tabla de Clientes',
             sql: 'CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT \'{}\', private_config JSONB DEFAULT \'{}\', schema_version INTEGER DEFAULT 1);'
           },

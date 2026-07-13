@@ -253,7 +253,7 @@ class Motor {
     }
 
     const result = await db.query(
-      'SELECT u.*, r.nombre as role_name, r.parent_id FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.token = $1',
+      'SELECT u.*, r.nombre as role_name, r.parent_id FROM usuarios u JOIN roles r ON u.role_id = r.id JOIN sesiones s ON u.id = s.usuario_id WHERE s.token = $1',
       [token]
     );
 

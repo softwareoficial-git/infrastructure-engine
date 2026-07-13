@@ -141,10 +141,13 @@ class UserDomain {
         throw new EngineError('INVALID_CREDENTIALS', 'Invalid username or password.');
       }
 
-      // Token Rotation: Generate a new token for this session
+      // Token Rotation & Multi-device: Create a new session
       const { v4: uuidv4 } = require('uuid');
       const newToken = uuidv4();
-      await db.query('UPDATE usuarios SET token = $1 WHERE id = $2', [newToken, userData.id]);
+      await db.query(
+        'INSERT INTO sesiones (usuario_id, token) VALUES ($1, $2)',
+        [userData.id, newToken]
+      );
 
       return {
         status: 'success',
