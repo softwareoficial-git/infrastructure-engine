@@ -27,8 +27,8 @@ El endpoint de registro permite crear una cuenta de usuario y un cliente asociad
 
 ### Ejemplo con cURL
 ```bash
-curl -X POST http://localhost:3001/register 
-     -H "Content-Type: application/json" 
+curl -X POST http://localhost:3001/register
+     -H "Content-Type: application/json"
      -d '{"username": "mi_usuario", "password": "PasswordSeguro123"}'
 ```
 
@@ -56,8 +56,8 @@ El inicio de sesión valida las credenciales y genera un **nuevo token de sesió
 
 ### Ejemplo con cURL
 ```bash
-curl -X POST http://localhost:3001/execute 
-     -H "Content-Type: application/json" 
+curl -X POST http://localhost:3001/execute
+     -H "Content-Type: application/json"
      -d '{"command": "USER:login", "payload": {"username": "mi_usuario", "password": "PasswordSeguro123"}}'
 ```
 
@@ -97,8 +97,8 @@ Para realizar cualquier acción protegida, el frontend debe incluir el token obt
 
 ### Ejemplo con cURL
 ```bash
-curl -X POST http://localhost:3001/execute 
-     -H "Content-Type: application/json" 
+curl -X POST http://localhost:3001/execute
+     -H "Content-Type: application/json"
      -d '{"token": "TU_TOKEN", "command": "USER:get-profile", "payload": {}}'
 ```
 

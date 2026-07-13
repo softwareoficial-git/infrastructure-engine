@@ -4,7 +4,7 @@ const db = require('../src/core/db');
 
 async function startAudit() {
   const scanner = new SystemScanner();
-  
+
   try {
     const catalog = await scanner.init();
     await scanner.setupSession();

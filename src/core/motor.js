@@ -68,9 +68,13 @@ class Motor {
 
   async authorize(user, domain, action = null) {
     const command = action ? `${domain}:${action}` : null;
-    console.log(`[!!! AUTH-TRACE-RAW !!!] USER_OBJ: ${JSON.stringify(user)} | DOMAIN: ${domain} | ACTION: ${action}`);
+    console.log(
+      `[!!! AUTH-TRACE-RAW !!!] USER_OBJ: ${JSON.stringify(user)} | DOMAIN: ${domain} | ACTION: ${action}`
+    );
 
-    console.log(`[AUTH-DEBUG] Validating access: User=${user?.username || 'UNKNOWN'} | Role=${user?.role_name || 'NONE'} | Cmd=${command || 'DOMAIN-ONLY'}`);
+    console.log(
+      `[AUTH-DEBUG] Validating access: User=${user?.username || 'UNKNOWN'} | Role=${user?.role_name || 'NONE'} | Cmd=${command || 'DOMAIN-ONLY'}`
+    );
 
     // 1. LISTA BLANCA DE COMANDOS PÚBLICOS (Sin Token)
     const publicCommands = [
@@ -79,7 +83,7 @@ class Motor {
       'ANALYTICS:track-visit',
       'SYSTEM:list-commands',
       'APP:client-create',
-      'CLIENT:user-create'
+      'CLIENT:user-create',
     ];
 
     if (command && publicCommands.includes(command)) {
@@ -102,7 +106,7 @@ class Motor {
 
     // 3. DEFINICIÓN DE PERMISOS POR ROL (Otros roles)
     const allowedPatterns = ROLE_PERMISSIONS[userRole] || [];
-    const hasAccessByRole = allowedPatterns.some(pattern => {
+    const hasAccessByRole = allowedPatterns.some((pattern) => {
       if (pattern === `${domain}:*`) return true;
       if (pattern === command) return true;
       return false;
@@ -118,7 +122,9 @@ class Motor {
     }
 
     if (!hasAccess) {
-      console.log(`[!!! AUTH-CRITICAL-FAIL !!!] DENY: User=${user.username} | Role=${user.role_name} | Cmd=${command} | Patterns=${JSON.stringify(allowedPatterns)}`);
+      console.log(
+        `[!!! AUTH-CRITICAL-FAIL !!!] DENY: User=${user.username} | Role=${user.role_name} | Cmd=${command} | Patterns=${JSON.stringify(allowedPatterns)}`
+      );
       if (userRole === 'EMPLEADO') {
         throw new EngineError('PERMISO_FALTANTE', `Comando: ${command}`);
       }
@@ -130,7 +136,7 @@ class Motor {
     if (!user) return 0;
     const userRole = normalizeRole(user.role_name);
     if (['SUPER_ADMIN', 'ADMINISTRADOR'].includes(userRole)) {
-      return payload.clienteId || payload.tenantId || user.cliente_id || 0; 
+      return payload.clienteId || payload.tenantId || user.cliente_id || 0;
     }
     return user.cliente_id;
   }
@@ -238,7 +244,10 @@ class Motor {
   async authUser(token) {
     if (!token) throw new EngineError('AUTH_REQUIRED');
 
-    if (token === 'BOOTSTRAP_TOKEN' || (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN)) {
+    if (
+      token === 'BOOTSTRAP_TOKEN' ||
+      (process.env.ADMIN_SECRET_TOKEN && token === process.env.ADMIN_SECRET_TOKEN)
+    ) {
       try {
         const result = await db.query(
           'SELECT u.*, r.nombre as role_name, r.parent_id FROM usuarios u JOIN roles r ON u.role_id = r.id WHERE u.username = $1',
@@ -253,7 +262,7 @@ class Motor {
     }
 
     const result = await db.query(
-      'SELECT u.*, r.nombre as role_name, r.parent_id FROM usuarios u JOIN roles r ON u.role_id = r.id JOIN sesiones s ON u.id = s.usuario_id WHERE s.token = $1',
+      'SELECT u.*, r.nombre as role_name, r.parent_id, s.token FROM usuarios u JOIN roles r ON u.role_id = r.id JOIN sesiones s ON u.id = s.usuario_id WHERE s.token = $1',
       [token]
     );
 

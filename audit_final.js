@@ -7,14 +7,14 @@ const db = require('./src/core/db');
 
 async function startFullProcess() {
   console.log('🚀 Iniciando Orquestación Final de Auditoría...');
-  
+
   // 1. Iniciar Servidor
   console.log('📡 Levantando servidor en http://localhost:3001...');
   const serverPath = path.join(__dirname, 'src', 'server.js');
   console.log(`[DEBUG] Server path: ${serverPath}`);
   const server = spawn('node', [serverPath], {
     stdio: 'inherit',
-    cwd: __dirname
+    cwd: __dirname,
   });
 
   // 2. Esperar a que el servidor responda al /health
@@ -28,7 +28,7 @@ async function startFullProcess() {
       console.log('✅ Servidor listo y saludable.');
     } catch (e) {
       console.log(`⏳ Esperando servidor... (Intento ${attempts}/10)`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
 
@@ -45,7 +45,7 @@ async function startFullProcess() {
     await scanner.setupSession();
     await scanner.runAudit(catalog);
     scanner.generateFinalReport();
-    
+
     console.log('\n✅ Auditoría completada exitosamente.');
   } catch (error) {
     console.error('\n❌ Error durante la auditoría:', error.message);

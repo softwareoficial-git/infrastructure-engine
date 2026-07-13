@@ -111,7 +111,9 @@ const authenticate = async (req, res, next) => {
   const requestId = req.headers['x-request-id'] || uuidv4();
   req.requestId = requestId;
 
-  console.log(`[DIAGNOSTIC] Request received | Cmd: ${req.body.command || req.body.cmd || 'N/A'} | Token: ${token ? 'PRESENT' : 'MISSING'}`);
+  console.log(
+    `[DIAGNOSTIC] Request received | Cmd: ${req.body.command || req.body.cmd || 'N/A'} | Token: ${token ? 'PRESENT' : 'MISSING'}`
+  );
 
   if (!token) {
     console.log(`[DIAGNOSTIC] No token provided. Proceeding as GUEST.`);
@@ -120,13 +122,20 @@ const authenticate = async (req, res, next) => {
 
   if (token === 'BOOTSTRAP_TOKEN') {
     console.log(`[DIAGNOSTIC] BOOTSTRAP TOKEN DETECTED. Bypassing DB Auth.`);
-    req.user = { id: 0, username: 'superadmin', role_name: 'SUPER_ADMIN', token: 'BOOTSTRAP_TOKEN' };
+    req.user = {
+      id: 0,
+      username: 'superadmin',
+      role_name: 'SUPER_ADMIN',
+      token: 'BOOTSTRAP_TOKEN',
+    };
     return next();
   }
 
   try {
     const user = await motor.authUser(token);
-    console.log(`[DIAGNOSTIC] User resolved: ${user.username} | Role: ${user.role_name} | ID: ${user.id}`);
+    console.log(
+      `[DIAGNOSTIC] User resolved: ${user.username} | Role: ${user.role_name} | ID: ${user.id}`
+    );
     req.user = user;
     next();
   } catch (error) {

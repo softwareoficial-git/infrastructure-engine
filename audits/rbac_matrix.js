@@ -1,75 +1,315 @@
 /**
  * RBAC Access Matrix
  * Defines the expected behavior of commands based on the user's role.
- * 
+ *
  * Roles:
  * - SISTEMA_ADMIN: Superadmin with total control.
  * - CLIENTE_DUEÑO: Owner of a specific business.
  * - CLIENTE_EMPLEADO: Employee of a business.
  * - GUEST: Unauthenticated user.
- * 
+ *
  * Outcomes:
  * - 'ALLOW': The command should return status: 'success'.
  * - 'DENY': The command should return an error (e.g., ACCESO_DENEGADO_ROL).
  */
 module.exports = {
   // --- SYSTEM DOMAIN ---
-  'SYSTEM:batch': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:init': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:list-commands': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:help': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:log-event': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-list': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-filter': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-stats': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-top-errors': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-user-activity': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-clear': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-archive': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:clear-all': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:migrate-schema': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:events-global': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:users-global-list': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:user-audit': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:tenant-audit': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:set-global-config': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'SYSTEM:get-global-config': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
+  'SYSTEM:batch': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:init': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:list-commands': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:help': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:log-event': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-list': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-filter': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-stats': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-top-errors': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-user-activity': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-clear': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-archive': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:clear-all': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:migrate-schema': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:events-global': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:users-global-list': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:user-audit': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:tenant-audit': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:set-global-config': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'SYSTEM:get-global-config': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
 
   // --- APP DOMAIN ---
-  'APP:template-create': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'APP:template-publish': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'APP:client-create': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'APP:update-client-plan': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'APP:migrate-global': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'APP:init-business': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'APP:self-register': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'ALLOW' },
+  'APP:template-create': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'APP:template-publish': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'APP:client-create': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'APP:update-client-plan': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'APP:migrate-global': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'APP:init-business': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'APP:self-register': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'ALLOW',
+  },
 
   // --- CLIENT DOMAIN ---
-  'CLIENT:user-create': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'CLIENT:user-read': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'CLIENT:user-update': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'CLIENT:user-list': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'CLIENT:user-permissions-update': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'CLIENT:schema-extend': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
+  'CLIENT:user-create': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'CLIENT:user-read': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'CLIENT:user-update': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'CLIENT:user-list': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'CLIENT:user-permissions-update': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'CLIENT:schema-extend': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
 
   // --- USER DOMAIN ---
-  'USER:login': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'ALLOW' },
-  'USER:get-profile': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'USER:read': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'USER:write': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'USER:read-path': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'USER:update-path': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'USER:push-item': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'USER:query-json': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
+  'USER:login': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'ALLOW',
+  },
+  'USER:get-profile': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'USER:read': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'USER:write': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'USER:read-path': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'USER:update-path': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'USER:push-item': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'USER:query-json': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
 
   // --- MONITOR DOMAIN ---
-  'MONITOR:get-global-stats': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'MONITOR:get-global-versions': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'DENY', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
-  'MONITOR:get-client-report': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'MONITOR:get-my-version': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
-  'MONITOR:get-system-health': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'DENY' },
+  'MONITOR:get-global-stats': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'MONITOR:get-global-versions': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'DENY',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
+  'MONITOR:get-client-report': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'MONITOR:get-my-version': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
+  'MONITOR:get-system-health': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'DENY',
+  },
 
   // --- ANALYTICS DOMAIN ---
-  'ANALYTICS:track-visit': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'ALLOW', GUEST: 'ALLOW' },
-  'ANALYTICS:list-visits': { SISTEMA_ADMIN: 'ALLOW', CLIENTE_DUEÑO: 'ALLOW', CLIENTE_EMPLEADO: 'DENY', GUEST: 'DENY' },
+  'ANALYTICS:track-visit': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'ALLOW',
+    GUEST: 'ALLOW',
+  },
+  'ANALYTICS:list-visits': {
+    SISTEMA_ADMIN: 'ALLOW',
+    CLIENTE_DUEÑO: 'ALLOW',
+    CLIENTE_EMPLEADO: 'DENY',
+    GUEST: 'DENY',
+  },
 };

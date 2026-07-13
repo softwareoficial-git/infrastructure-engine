@@ -101,7 +101,10 @@ class MonitorDomain {
       const { clienteId } = payload;
 
       // Security check: Only ADMINISTRADOR or the client's own admin/user can see this
-      if (!['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) && user.cliente_id !== clienteId) {
+      if (
+        !['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) &&
+        user.cliente_id !== clienteId
+      ) {
         throw new EngineError('ACCESO_DENEGADO_ROL');
       }
 
@@ -155,7 +158,9 @@ class MonitorDomain {
     'get-my-version': async function (user, payload) {
       // Client level: See their own current version
       const { clienteId } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
 
       if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL');
 
@@ -175,7 +180,6 @@ class MonitorDomain {
       const targetClientId = user.targetTenantId;
 
       if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Cliente no identificado.');
-
 
       try {
         await db.query('SELECT 1');

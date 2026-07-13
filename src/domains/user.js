@@ -144,10 +144,10 @@ class UserDomain {
       // Token Rotation & Multi-device: Create a new session
       const { v4: uuidv4 } = require('uuid');
       const newToken = uuidv4();
-      await db.query(
-        'INSERT INTO sesiones (usuario_id, token) VALUES ($1, $2)',
-        [userData.id, newToken]
-      );
+      await db.query('INSERT INTO sesiones (usuario_id, token) VALUES ($1, $2)', [
+        userData.id,
+        newToken,
+      ]);
 
       return {
         status: 'success',
@@ -173,7 +173,9 @@ class UserDomain {
 
     read: async function (user, payload) {
       const { clienteId } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
 
       if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Cliente no identificado.');
 
@@ -186,7 +188,9 @@ class UserDomain {
 
     write: async function (user, payload) {
       const { clienteId, data } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
 
       const result = await db.query(
         "UPDATE clientes SET public_config = COALESCE(public_config, '{}'::jsonb) || $2 WHERE id = $1 RETURNING public_config",
@@ -198,7 +202,9 @@ class UserDomain {
 
     'read-path': async function (user, payload) {
       const { clienteId, path } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
       const result = await db.query(
@@ -213,7 +219,9 @@ class UserDomain {
 
     'update-path': async function (user, payload) {
       const { clienteId, path, value } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
 
       if (path.includes('[') || path.includes(']')) {
         throw new EngineError(
@@ -233,7 +241,9 @@ class UserDomain {
 
     'push-item': async function (user, payload) {
       const { clienteId, path, item } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 
@@ -256,7 +266,9 @@ class UserDomain {
 
     'query-json': async function (user, payload) {
       const { clienteId, path, filter, limit, offset } = payload;
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
 
       const pgPath = UserDomain.parsePath(path);
 
@@ -281,6 +293,57 @@ class UserDomain {
 
       const result = await db.query(query, params);
       return { status: 'success', results: result.rows.map((r) => r.item) };
+    },
+
+    logout: async function (user, payload) {
+      const tokenToInvalidate = payload.token || user.token;
+      if (!tokenToInvalidate) {
+        throw new EngineError('AUTH_REQUIRED', 'No session token provided to logout.');
+      }
+
+      const result = await db.query('DELETE FROM sesiones WHERE token = $1', [tokenToInvalidate]);
+
+      if (result.rowCount === 0) {
+        throw new EngineError(
+          'SESSION_NOT_FOUND',
+          'Session token not found or already invalidated.'
+        );
+      }
+
+      return { status: 'success', message: 'Session invalidated successfully.' };
+    },
+
+    'list-sessions': async function (user) {
+      const result = await db.query(
+        'SELECT token, created_at FROM sesiones WHERE usuario_id = $1',
+        [user.id]
+      );
+      return {
+        status: 'success',
+        sessions: result.rows.map((s) => ({
+          token: s.token,
+          createdAt: s.created_at,
+        })),
+      };
+    },
+
+    'revoke-session': async function (user, payload) {
+      const { token } = payload;
+
+      // Security: Only allow revoking sessions belonging to the user
+      const result = await db.query('DELETE FROM sesiones WHERE token = $1 AND usuario_id = $2', [
+        token,
+        user.id,
+      ]);
+
+      if (result.rowCount === 0) {
+        throw new EngineError(
+          'SESSION_NOT_FOUND',
+          'Session token not found or does not belong to this user.'
+        );
+      }
+
+      return { status: 'success', message: 'Session revoked successfully.' };
     },
   };
 }

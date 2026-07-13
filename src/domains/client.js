@@ -77,7 +77,9 @@ class ClientDomain {
     'user-create': async function (user, payload) {
       let { username, password, role, clienteId } = payload;
 
-      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) ? clienteId : user.cliente_id;
+      const targetClientId = ['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name)
+        ? clienteId
+        : user.cliente_id;
       if (!targetClientId)
         throw new EngineError('ACCESO_DENEGADO_ROL', 'Contexto de cliente ausente.');
 

@@ -1,29 +1,15 @@
 /**
  * Matriz de Permisos del Sistema
  * Define los accesos permitidos por rol.
- * 
- * Nota: Los roles se definen en mayúsculas. 
+ *
+ * Nota: Los roles se definen en mayúsculas.
  * El sistema de autorización normaliza los roles antes de la comparación.
  */
 
 const ROLE_PERMISSIONS = {
-  'SUPER_ADMIN': [
-    'SYSTEM:*',
-    'APP:*',
-    'CLIENT:*',
-    'USER:*',
-    'MONITOR:*',
-    'ANALYTICS:*',
-  ],
-  'ADMINISTRADOR': [
-    'SYSTEM:*',
-    'APP:*',
-    'CLIENT:*',
-    'USER:*',
-    'MONITOR:*',
-    'ANALYTICS:*',
-  ],
-  'DUEÑO': [
+  SUPER_ADMIN: ['SYSTEM:*', 'APP:*', 'CLIENT:*', 'USER:*', 'MONITOR:*', 'ANALYTICS:*'],
+  ADMINISTRADOR: ['SYSTEM:*', 'APP:*', 'CLIENT:*', 'USER:*', 'MONITOR:*', 'ANALYTICS:*'],
+  DUEÑO: [
     'CLIENT:*',
     'USER:*',
     'APP:init-business',
@@ -32,7 +18,7 @@ const ROLE_PERMISSIONS = {
     'MONITOR:get-system-health',
     'ANALYTICS:list-visits',
   ],
-  'EMPLEADO': [
+  EMPLEADO: [
     'USER:get-profile',
     'USER:read',
     'USER:write',
@@ -49,7 +35,7 @@ const ROLE_PERMISSIONS = {
 
 /**
  * Normaliza un string para comparaciones de roles, eliminando tildes y convirtiendo a mayúsculas.
- * @param {string} text 
+ * @param {string} text
  * @returns {string}
  */
 function normalizeRole(text) {
