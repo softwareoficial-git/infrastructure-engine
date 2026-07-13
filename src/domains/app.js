@@ -1,6 +1,7 @@
 const motor = require('../core/motor');
 const db = require('../core/db');
 const { EngineError } = require('../core/errors');
+const { hashPassword } = require('../utils/security');
 
 // --- SCHEMAS ---
 const BASE_CONFIG_SCHEMA = {
@@ -99,7 +100,7 @@ class AppDomain {
         username: { type: 'string', minLength: 3 },
         password: { type: 'string', minLength: 6 },
       },
-      required: ['nombreCliente', 'username', 'password'],
+      required: ['username', 'password'],
     },
   };
 
@@ -251,7 +252,6 @@ class AppDomain {
         config: result.rows[0].public_config,
       };
     },
-
     'self-register': async function (user, payload) {
       const { nombreCliente, username, password } = payload;
       const { v4: uuidv4 } = require('uuid');
@@ -267,7 +267,8 @@ class AppDomain {
         await client.query('BEGIN');
 
         // 2. Create Client
-        const newCliente = await AppDomain._createClient(client, nombreCliente);
+        const finalNombreCliente = nombreCliente || `Cliente de ${username}`;
+        const newCliente = await AppDomain._createClient(client, finalNombreCliente);
 
         // 3. Find the 'DUEÑO' role ID
         const roleRes = await client.query("SELECT id FROM roles WHERE nombre = 'DUEÑO'");
@@ -277,9 +278,10 @@ class AppDomain {
 
         // 4. Create User
         const token = uuidv4();
+        const hashedPassword = await hashPassword(password);
         const userRes = await client.query(
           'INSERT INTO usuarios (username, password, role_id, token, cliente_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-          [username, password, roleId, token, newCliente.id]
+          [username, hashedPassword, roleId, token, newCliente.id]
         );
         const newUser = userRes.rows[0];
 

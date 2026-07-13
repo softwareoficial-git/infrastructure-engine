@@ -141,9 +141,14 @@ class UserDomain {
         throw new EngineError('INVALID_CREDENTIALS', 'Invalid username or password.');
       }
 
+      // Token Rotation: Generate a new token for this session
+      const { v4: uuidv4 } = require('uuid');
+      const newToken = uuidv4();
+      await db.query('UPDATE usuarios SET token = $1 WHERE id = $2', [newToken, userData.id]);
+
       return {
         status: 'success',
-        token: userData.token,
+        token: newToken,
         user: {
           id: userData.id,
           username: userData.username,

@@ -155,13 +155,13 @@ app.post('/register', async (req, res) => {
   req.requestId = requestId;
   const { username, password, nombreCliente } = req.body;
 
-  if (!username || !password || !nombreCliente) {
+  if (!username || !password) {
     return sendResponse(
       res,
       400,
       'error',
       null,
-      { code: 'MISSING_FIELDS', message: 'username, password, and nombreCliente are required.' },
+      { code: 'MISSING_FIELDS', message: 'username and password are required.' },
       requestId
     );
   }
