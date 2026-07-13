@@ -197,7 +197,7 @@ class AppDomain {
         [clienteId, plan]
       );
 
-      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
       return {
         status: 'success',
         message: `Plan actualizado a ${plan}`,
@@ -244,7 +244,7 @@ class AppDomain {
         [clienteId, JSON.stringify(initialStructure)]
       );
 
-      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
 
       return {
         status: 'success',
@@ -273,7 +273,7 @@ class AppDomain {
         // 3. Find the 'DUEÑO' role ID
         const roleRes = await client.query("SELECT id FROM roles WHERE nombre = 'DUEÑO'");
         if (roleRes.rows.length === 0)
-          throw new EngineError('INTERNAL_ERROR', 'Role DUEÑO not found.');
+          throw new EngineError('USER_NOT_FOUND', 'El rol base [DUEÑO] no fue encontrado en el catálogo de roles del sistema. Es necesario ejecutar SYSTEM:init primero.');
         const roleId = roleRes.rows[0].id;
 
         // 4. Create User
@@ -284,6 +284,12 @@ class AppDomain {
           [username, hashedPassword, roleId, token, newCliente.id]
         );
         const newUser = userRes.rows[0];
+
+        // Create initial session
+        await client.query(
+          'INSERT INTO sesiones (usuario_id, token) VALUES ($1, $2)',
+          [newUser.id, token]
+        );
 
         await client.query('COMMIT');
 

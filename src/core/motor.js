@@ -92,7 +92,11 @@ class Motor {
     // Si no hay usuario o es GUEST y el comando no es público, denegar
     if (!user || user.role_name === 'GUEST') {
       console.log(`[AUTH-DEBUG] DENY: No authenticated user or GUEST role for ${command}`);
-      throw new EngineError('ACCESO_DENEGADO_ROL');
+      throw new EngineError('ACCESO_DENEGADO_ROL', {
+        reason: 'Autenticación requerida o rol GUEST insuficiente.',
+        command: command,
+        required: 'Cualquier rol autenticado superior a GUEST',
+      });
     }
 
     // 2. ADMINISTRADORES: Acceso total basado en la matriz de permisos
@@ -123,10 +127,18 @@ class Motor {
       console.log(
         `[!!! AUTH-CRITICAL-FAIL !!!] DENY: User=${user.username} | Role=${user.role_name} | Cmd=${command} | Patterns=${JSON.stringify(allowedPatterns)}`
       );
+      
+      const errorDetails = {
+        command: command,
+        userRole: user.role_name,
+        allowedPatternsForRole: allowedPatterns,
+        suggestion: 'Verifica los permisos asignados a tu rol o solicita el permiso específico para este comando.',
+      };
+
       if (userRole === 'EMPLEADO') {
-        throw new EngineError('PERMISO_FALTANTE', `Comando: ${command}`);
+        throw new EngineError('PERMISO_FALTANTE', errorDetails);
       }
-      throw new EngineError('ACCESO_DENEGADO_ROL');
+      throw new EngineError('ACCESO_DENEGADO_ROL', errorDetails);
     }
   }
 

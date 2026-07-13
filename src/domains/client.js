@@ -117,7 +117,7 @@ class ClientDomain {
         [targetClientId, userId]
       );
 
-      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND', { id: userId });
       return { status: 'success', usuario: result.rows[0] };
     },
 
@@ -155,7 +155,7 @@ class ClientDomain {
         params
       );
 
-      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND', { id: userId });
       return { status: 'success', usuario: result.rows[0] };
     },
 

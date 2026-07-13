@@ -13,22 +13,22 @@ const ERROR_CATALOG = {
   },
   SISTEMA_RESTRINGIDO: {
     message: 'Acceso restringido al dominio del Sistema.',
-    solution: 'Solo el ADMINISTRADOR tiene permisos para ejecutar comandos en el dominio SYSTEM.',
+    solution: 'Este comando requiere privilegios de ADMINISTRADOR GLOBAL. Verifica que tu cuenta tenga el rol correcto.',
   },
   CLIENTE_RESTRINGIDO: {
     message: 'Acceso restringido a la gestión de Clientes.',
     solution:
-      'Solo el ADMINISTRADOR o el DUEÑO del negocio pueden realizar cambios en la configuración del cliente.',
+      'Solo el ADMINISTRADOR o el DUEÑO del negocio pueden modificar la configuración del cliente. Solicita permisos al administrador.',
   },
   ACCESO_DENEGADO_ROL: {
-    message: 'Tu rol actual no tiene acceso a este comando.',
+    message: 'El rol asignado a tu usuario no tiene permisos para ejecutar esta acción.',
     solution:
-      'Contacta con tu administrador para verificar si tu rol tiene los permisos necesarios para ejecutar esta acción.',
+      'Verifica que tu rol tenga acceso al comando solicitado. Si crees que es un error, contacta con soporte técnico.',
   },
   PERMISO_FALTANTE: {
-    message: 'Permiso específico no asignado.',
+    message: 'Permiso específico no habilitado para este usuario.',
     solution:
-      'El empleado no tiene habilitada esta función. Solicita al DUEÑO que añada el comando a tu lista de permisos.',
+      'Tu rol permite el acceso general, pero este comando específico no ha sido habilitado en tu perfil. Solicita la activación al DUEÑO del negocio.',
   },
   CMD_NOT_FOUND: {
     message: 'El comando solicitado no fue encontrado.',
@@ -92,11 +92,39 @@ const ERROR_CATALOG = {
 class EngineError extends Error {
   constructor(code, details = null, customSolution = null) {
     const errorDef = ERROR_CATALOG[code] || ERROR_CATALOG['INTERNAL_ERROR'];
-    super(errorDef.message);
+    
+    let finalMessage = errorDef.message;
+    let finalSolution = customSolution || errorDef.solution;
+
+    // --- Lógica de Mensajes Dinámicos ---
+    if (details) {
+      if (typeof details === 'string') {
+        // Caso simple: el detalle es un mensaje adicional
+        finalMessage = `${errorDef.message} ${details}`.trim();
+      } else if (typeof details === 'object') {
+        // Caso avanzado: el detalle es un objeto de contexto (usualmente para AUTH o PAYLOAD)
+        if (code === 'ACCESO_DENEGADO_ROL' || code === 'PERMISO_FALTANTE') {
+          const role = details.userRole || 'tu rol';
+          const cmd = details.command || 'el comando';
+          finalMessage = `El rol [${role}] no tiene permisos suficientes para ejecutar [${cmd}].`;
+          
+          if (details.suggestion) {
+            finalSolution = details.suggestion;
+          } else if (details.required) {
+            finalSolution = `Se requiere el siguiente nivel de acceso: ${details.required}.`;
+          }
+        } else if (code === 'CLIENT_NOT_FOUND' || code === 'USER_NOT_FOUND') {
+          const id = details.id || 'el recurso';
+          finalMessage = `${errorDef.message} (ID: ${id})`;
+        }
+      }
+    }
+
+    super(finalMessage);
     this.name = 'EngineError';
     this.code = code;
-    this.solution = customSolution || errorDef.solution;
-    this.details = details; // Used for AJV validation errors or specific context
+    this.solution = finalSolution;
+    this.details = details;
   }
 }
 

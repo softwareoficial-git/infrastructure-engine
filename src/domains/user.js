@@ -167,7 +167,7 @@ class UserDomain {
         [user.id]
       );
 
-      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND', { id: user.id });
       return { status: 'success', profile: result.rows[0] };
     },
 
@@ -179,7 +179,7 @@ class UserDomain {
       const result = await db.query('SELECT public_config FROM clientes WHERE id = $1', [
         clienteId,
       ]);
-      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
       return { status: 'success', data: result.rows[0].public_config };
     },
 
@@ -223,7 +223,7 @@ class UserDomain {
         "UPDATE clientes SET public_config = jsonb_set(COALESCE(public_config, '{}'::jsonb), $2, $3::jsonb, true) WHERE id = $1 RETURNING public_config",
         [clienteId, pgPath, JSON.stringify(value)]
       );
-      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 
@@ -245,7 +245,7 @@ class UserDomain {
         [clienteId, pgPath, JSON.stringify([item])]
       );
 
-      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
       return { status: 'success', updatedData: result.rows[0].public_config };
     },
 

@@ -105,12 +105,12 @@ class MonitorDomain {
         !['ADMINISTRADOR', 'SUPER_ADMIN'].includes(user.role_name) &&
         user.cliente_id !== clienteId
       ) {
-        throw new EngineError('ACCESO_DENEGADO_ROL');
+        throw new EngineError('ACCESO_DENEGADO_ROL', `No tienes permiso para acceder al reporte del cliente ID ${clienteId}.`);
       }
 
       // 1. Basic Info
       const clientRes = await db.query('SELECT * FROM clientes WHERE id = $1', [clienteId]);
-      if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
       const client = clientRes.rows[0];
 
       // 2. User Count
@@ -162,13 +162,13 @@ class MonitorDomain {
         ? clienteId
         : user.cliente_id;
 
-      if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL');
+      if (!targetClientId) throw new EngineError('ACCESO_DENEGADO_ROL', 'No se pudo determinar el ID del cliente para consultar la versión.');
 
       const result = await db.query('SELECT schema_version FROM clientes WHERE id = $1', [
         targetClientId,
       ]);
 
-      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: targetClientId });
 
       return {
         status: 'success',
