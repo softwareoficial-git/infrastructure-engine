@@ -49,7 +49,7 @@ const requestLogger = (req, res, next) => {
 };
 
 // --- GLOBAL EVENT LOGGER HELPER ---
-const performEventLog = async (req, res, command) => {
+const performEventLog = async () => {
   // ... (existing performEventLog implementation)
 };
 
