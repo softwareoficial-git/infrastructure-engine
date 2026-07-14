@@ -163,7 +163,7 @@ class UserDomain {
     'get-profile': async function (user) {
       console.log(`[DEBUG] get-profile requested for user.id: ${user.id}`);
       const result = await db.query(
-        'SELECT u.id, u.username, r.nombre as role_name, c.nombre as cliente_nombre FROM usuarios u JOIN roles r ON u.role_id = r.id LEFT JOIN clientes c ON u.cliente_id = c.id WHERE u.id = $1',
+        'SELECT u.id, u.username, u.cliente_id, r.nombre as role_name, c.nombre as cliente_nombre FROM usuarios u JOIN roles r ON u.role_id = r.id LEFT JOIN clientes c ON u.cliente_id = c.id WHERE u.id = $1',
         [user.id]
       );
 

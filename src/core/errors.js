@@ -13,7 +13,8 @@ const ERROR_CATALOG = {
   },
   SISTEMA_RESTRINGIDO: {
     message: 'Acceso restringido al dominio del Sistema.',
-    solution: 'Este comando requiere privilegios de ADMINISTRADOR GLOBAL. Verifica que tu cuenta tenga el rol correcto.',
+    solution:
+      'Este comando requiere privilegios de ADMINISTRADOR GLOBAL. Verifica que tu cuenta tenga el rol correcto.',
   },
   CLIENTE_RESTRINGIDO: {
     message: 'Acceso restringido a la gestión de Clientes.',
@@ -92,7 +93,7 @@ const ERROR_CATALOG = {
 class EngineError extends Error {
   constructor(code, details = null, customSolution = null) {
     const errorDef = ERROR_CATALOG[code] || ERROR_CATALOG['INTERNAL_ERROR'];
-    
+
     let finalMessage = errorDef.message;
     let finalSolution = customSolution || errorDef.solution;
 
@@ -107,7 +108,7 @@ class EngineError extends Error {
           const role = details.userRole || 'tu rol';
           const cmd = details.command || 'el comando';
           finalMessage = `El rol [${role}] no tiene permisos suficientes para ejecutar [${cmd}].`;
-          
+
           if (details.suggestion) {
             finalSolution = details.suggestion;
           } else if (details.required) {

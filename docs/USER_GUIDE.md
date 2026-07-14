@@ -27,8 +27,8 @@ Todos los comandos se envían al mismo endpoint utilizando tu token de sesión.
 {
   "token": "TU_TOKEN_AQUI",
   "command": "DOMINIO:accion",
-  "payload": { 
-    "dato": "valor" 
+  "payload": {
+    "dato": "valor"
   }
 }
 ```

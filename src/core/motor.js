@@ -127,12 +127,13 @@ class Motor {
       console.log(
         `[!!! AUTH-CRITICAL-FAIL !!!] DENY: User=${user.username} | Role=${user.role_name} | Cmd=${command} | Patterns=${JSON.stringify(allowedPatterns)}`
       );
-      
+
       const errorDetails = {
         command: command,
         userRole: user.role_name,
         allowedPatternsForRole: allowedPatterns,
-        suggestion: 'Verifica los permisos asignados a tu rol o solicita el permiso específico para este comando.',
+        suggestion:
+          'Verifica los permisos asignados a tu rol o solicita el permiso específico para este comando.',
       };
 
       if (userRole === 'EMPLEADO') {
@@ -145,15 +146,15 @@ class Motor {
   resolveTenantId(user, payload) {
     if (!user) return 0;
     const userRole = normalizeRole(user.role_name);
-    
+
     // BLINDAJE TOTAL DE AISLAMIENTO (Tenant Isolation):
     // Solo los administradores globales pueden saltar entre tenants.
-    // Para cualquier usuario de negocio (Dueño, Empleado), el sistema 
+    // Para cualquier usuario de negocio (Dueño, Empleado), el sistema
     // ignora cualquier clienteId en el payload y fuerza el uso de su propio cliente_id.
     if (['SUPER_ADMIN', 'ADMINISTRADOR'].includes(userRole)) {
       return payload.clienteId || payload.tenantId || user.cliente_id || 0;
     }
-    
+
     return user.cliente_id;
   }
 
