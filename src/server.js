@@ -115,8 +115,8 @@ const authenticate = async (req, res, next) => {
     `[DIAGNOSTIC] Request received | Cmd: ${req.body.command || req.body.cmd || 'N/A'} | Token: ${token ? 'PRESENT' : 'MISSING'}`
   );
 
-  if (!token) {
-    console.log(`[DIAGNOSTIC] No token provided. Proceeding as GUEST.`);
+  if (!token || token === 'PUBLIC_TOKEN') {
+    console.log(`[DIAGNOSTIC] No token or PUBLIC_TOKEN provided. Proceeding as GUEST.`);
     return next();
   }
 
