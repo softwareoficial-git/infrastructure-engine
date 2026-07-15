@@ -367,28 +367,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// --- RETRY HELPER FOR DATABASE CONNECTION ---
-async function waitForDatabase(maxRetries = 30, delayMs = 1000) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`🔄 Database connection attempt ${attempt}/${maxRetries}...`);
-      await db.query('SELECT 1');
-      console.log('✅ Infrastructure Engine: Database connected.');
-      return true;
-    } catch (error) {
-      if (attempt === maxRetries) {
-        throw error; // Final attempt failed
-      }
-      console.log(`⏳ Retrying in ${delayMs}ms... (${error.code || error.message})`);
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-  }
-}
-
 async function startServer() {
   try {
-    // 1. Database Connectivity Check with Retries
-    await waitForDatabase(30, 2000);
+    // 1. Database Connectivity Check
+    await db.query('SELECT 1');
+    console.log('✅ Infrastructure Engine: Database connected.');
 
     // 2. Automatic Initialization Check
     const tablesCheck = await db.query(
@@ -408,7 +391,7 @@ async function startServer() {
     // 3. Automatic Migration Check
     const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 2; // Versión de producción base v2.0
+    const TARGET_VERSION = 1; // Versión de producción base v1.0
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
