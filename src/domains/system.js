@@ -306,6 +306,24 @@ class SystemDomain {
               );
             },
           },
+          {
+            name: 'Official Default Template',
+            fn: async (cl) => {
+              const existing = await cl.query(
+                'SELECT id FROM plantillas WHERE es_oficial = true LIMIT 1'
+              );
+              if (existing.rows.length === 0) {
+                await cl.query(
+                  `INSERT INTO plantillas (nombre, contenido, es_oficial)
+                   VALUES ($1, $2, true)`,
+                  [
+                    'Official Default Template',
+                    JSON.stringify({ stock: [], precios: {}, categorias: [] }),
+                  ]
+                );
+              }
+            },
+          },
         ],
       };
 
