@@ -234,19 +234,19 @@ class SystemDomain {
           },
           {
             name: 'Tabla de Usuarios',
-            sql: "CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255) UNIQUE NOT NULL, cliente_id INTEGER, permisos JSONB DEFAULT '[]');",
+            sql: "CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255), cliente_id INTEGER, permisos JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);",
           },
           {
             name: 'Tabla de Sesiones',
-            sql: 'CREATE TABLE IF NOT EXISTS sesiones (id SERIAL PRIMARY KEY, usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE, token VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, expires_at TIMESTAMP WITH TIME ZONE);',
+            sql: 'CREATE TABLE IF NOT EXISTS sesiones (id SERIAL PRIMARY KEY, usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE, token VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);',
           },
           {
             name: 'Tabla de Clientes',
-            sql: "CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT '{}', private_config JSONB DEFAULT '{}', schema_version INTEGER DEFAULT 1);",
+            sql: "CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT '{}', private_config JSONB DEFAULT '{}', schema_version INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);",
           },
           {
             name: 'Tabla de Plantillas',
-            sql: "CREATE TABLE IF NOT EXISTS plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT '{}', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false);",
+            sql: "CREATE TABLE IF NOT EXISTS plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT '{}', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);",
           },
           {
             name: 'Tabla de Settings',
@@ -641,6 +641,27 @@ class SystemDomain {
       const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
 
       console.log(`Migrating schema from v${currentVersion} to v${targetVersion}...`);
+
+      // Migration v2: Ensure official template exists
+      if (currentVersion < 2 && targetVersion >= 2) {
+        console.log('Applying Migration v2: Ensuring official template exists...');
+        const existing = await client.query(
+          'SELECT id FROM plantillas WHERE es_oficial = true LIMIT 1'
+        );
+        if (existing.rows.length === 0) {
+          await client.query(
+            `INSERT INTO plantillas (nombre, contenido, es_oficial)
+             VALUES ($1, $2, true)`,
+            [
+              'Official Default Template',
+              JSON.stringify({ stock: [], precios: {}, categorias: [] }),
+            ]
+          );
+          console.log('✅ Official template created.');
+        }
+        await client.query('UPDATE clientes SET schema_version = 2');
+        console.log('✅ Migration v2 completed.');
+      }
 
       if (currentVersion < 3 && targetVersion >= 3) {
         console.log('Applying Migration v3: Creating system_events table...');
