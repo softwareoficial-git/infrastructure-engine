@@ -367,11 +367,28 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// --- RETRY HELPER FOR DATABASE CONNECTION ---
+async function waitForDatabase(maxRetries = 30, delayMs = 1000) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 Database connection attempt ${attempt}/${maxRetries}...`);
+      await db.query('SELECT 1');
+      console.log('✅ Infrastructure Engine: Database connected.');
+      return true;
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error; // Final attempt failed
+      }
+      console.log(`⏳ Retrying in ${delayMs}ms... (${error.code || error.message})`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 async function startServer() {
   try {
-    // 1. Database Connectivity Check
-    await db.query('SELECT 1');
-    console.log('✅ Infrastructure Engine: Database connected.');
+    // 1. Database Connectivity Check with Retries
+    await waitForDatabase(30, 2000);
 
     // 2. Automatic Initialization Check
     const tablesCheck = await db.query(
