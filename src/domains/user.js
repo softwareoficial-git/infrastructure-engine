@@ -311,7 +311,33 @@ class UserDomain {
       params.push(limit, offset);
 
       const result = await db.query(query, params);
-      return { status: 'success', timeline: result.rows };
+      
+      // Procesar el timeline para añadir el resumen
+      const timeline = result.rows.map(event => {
+        let resumen = 'Operación sin detalle';
+        const p = event.payload;
+
+        if (event.command === 'USER:push-item' || event.command === 'USER:update-path') {
+          const item = p.item || p.value;
+          if (item) {
+            // Detección mejorada para ventas con múltiples productos o items
+            const nombre = item.name || item.product_code || 'Producto';
+            const precio = item.price || 0;
+            const cantidad = item.qty || 1;
+            const total = item.total || (precio * cantidad);
+            
+            if (event.command === 'USER:push-item') {
+              resumen = `Venta: ${nombre} x${cantidad} (Unitario: ${precio}, Total: ${total})`;
+            } else {
+              resumen = `Actualizó ${nombre} (Nuevo valor: ${item.payment_link || total})`;
+            }
+          }
+        }
+        
+        return { ...event, resumen };
+      });
+
+      return { status: 'success', timeline };
     },
 
     logout: async function (user, payload) {
