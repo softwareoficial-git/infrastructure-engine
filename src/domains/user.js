@@ -90,6 +90,16 @@ class UserDomain {
         offset: { type: 'integer', default: 0 },
       },
     },
+    'atomic-push-item': {
+      type: 'object',
+      description: 'Atomically appends an item to a JSONB array.',
+      properties: {
+        clienteId: { type: 'integer' },
+        path: { type: 'string' },
+        item: { type: 'object' },
+      },
+      required: ['clienteId', 'path', 'item'],
+    },
   };
 
   static docs = {
@@ -123,6 +133,10 @@ class UserDomain {
     'audit-team': {
       description: 'Audit activity within the user\'s tenant.',
       errors: [],
+    },
+    'atomic-push-item': {
+      description: 'Atomically appends an item to a JSONB array.',
+      errors: ['CLIENT_NOT_FOUND'],
     },
   };
 
@@ -338,6 +352,29 @@ class UserDomain {
       });
 
       return { status: 'success', timeline };
+    },
+
+    'atomic-push-item': async function (user, payload) {
+      const { clienteId, path, item } = payload;
+
+      const pgPath = UserDomain.parsePath(path);
+
+      // Operación atómica en la base de datos usando jsonb_set
+      const result = await db.query(
+        `UPDATE clientes
+         SET public_config = jsonb_set(
+           COALESCE(public_config, '{}'::jsonb),
+           $2,
+           COALESCE(public_config #> $2, '[]'::jsonb) || $3::jsonb,
+           true
+         )
+         WHERE id = $1
+         RETURNING public_config`,
+        [clienteId, pgPath, JSON.stringify([item])]
+      );
+
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
+      return { status: 'success', updatedData: result.rows[0].public_config };
     },
 
     logout: async function (user, payload) {
