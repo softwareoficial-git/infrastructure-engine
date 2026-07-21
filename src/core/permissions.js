@@ -12,6 +12,7 @@ const ROLE_PERMISSIONS = {
   DUEÑO: [
     'CLIENT:*',
     'USER:*',
+    'USER:audit-team',
     'APP:init-business',
     'MONITOR:get-client-report',
     'MONITOR:get-my-version',

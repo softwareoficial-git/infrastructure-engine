@@ -81,6 +81,15 @@ class UserDomain {
       },
       required: ['clienteId', 'path', 'filter'],
     },
+    'audit-team': {
+      type: 'object',
+      description: 'Audits the activity of users in the current tenant.',
+      properties: {
+        userId: { type: 'integer' },
+        limit: { type: 'integer', default: 50 },
+        offset: { type: 'integer', default: 0 },
+      },
+    },
   };
 
   static docs = {
@@ -110,6 +119,10 @@ class UserDomain {
       description:
         'Find items in an array that match a filter (e.g. "product_id: 123"). Supports limit and offset for pagination.',
       errors: ['CLIENT_NOT_FOUND'],
+    },
+    'audit-team': {
+      description: 'Audit activity within the user\'s tenant.',
+      errors: [],
     },
   };
 
@@ -275,6 +288,30 @@ class UserDomain {
 
       const result = await db.query(query, params);
       return { status: 'success', results: result.rows.map((r) => r.item) };
+    },
+
+    'audit-team': async function (user, payload) {
+      const { userId, limit = 50, offset = 0 } = payload;
+      const tenantId = user.cliente_id; // Forzamos el uso del tenant del Dueño
+
+      let query = `
+        SELECT e.*, u.username as user_name
+        FROM system_events e
+        LEFT JOIN usuarios u ON e.user_id = u.id
+        WHERE e.tenant_id = $1
+      `;
+      const params = [tenantId];
+
+      if (userId) {
+        query += ` AND e.user_id = $2`;
+        params.push(userId);
+      }
+
+      query += ` ORDER BY e.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit, offset);
+
+      const result = await db.query(query, params);
+      return { status: 'success', timeline: result.rows };
     },
 
     logout: async function (user, payload) {
