@@ -855,6 +855,26 @@ class SystemDomain {
       };
     },
 
+    'list-owners': async function (user, payload, txClient = null) {
+      const query = `
+        SELECT
+          u.id,
+          u.username,
+          u.cliente_id,
+          r.nombre as role_name,
+          c.nombre as cliente_nombre,
+          c.private_config
+        FROM usuarios u
+        JOIN roles r ON u.role_id = r.id
+        LEFT JOIN clientes c ON u.cliente_id = c.id
+        WHERE r.nombre = 'DUEÑO'
+        ORDER BY u.username ASC
+      `;
+
+      const result = await (txClient || db).query(query, []);
+      return { status: 'success', owners: result.rows };
+    },
+
     'user-audit': async function (user, payload, txClient = null) {
       const { userId, limit = 50, offset = 0 } = payload;
 
