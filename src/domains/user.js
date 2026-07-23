@@ -203,13 +203,27 @@ class UserDomain {
       const profile = result.rows[0];
       const privateConfig = profile.private_config || {};
       
-      // Calcular días restantes de trial
       let daysRemaining = null;
-      if (privateConfig.plan === 'pro' && privateConfig.trial_start_date) {
-        const trialStart = new Date(privateConfig.trial_start_date);
+
+      // Calcular días restantes de forma dinámica
+      if (privateConfig.plan === 'pro') {
         const now = new Date();
-        const diffDays = Math.floor((now - trialStart) / (1000 * 60 * 60 * 24));
-        daysRemaining = Math.max(0, 30 - diffDays);
+        let referenceDate;
+        
+        if (privateConfig.is_trial) {
+          referenceDate = new Date(privateConfig.trial_end_date);
+          // Si es trial, el contador es respecto a la fecha de fin
+          daysRemaining = Math.max(0, Math.floor((referenceDate - now) / (1000 * 60 * 60 * 24)));
+        } else if (privateConfig.last_payment_date) {
+          referenceDate = new Date(privateConfig.last_payment_date);
+          const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+          daysRemaining = Math.max(0, 30 - diffDays);
+        } else {
+          // Fallback al creado
+          referenceDate = new Date(profile.created_at);
+          const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+          daysRemaining = Math.max(0, 30 - diffDays);
+        }
       }
 
       return { 
@@ -218,7 +232,7 @@ class UserDomain {
             ...profile,
             subscription: {
                 plan: privateConfig.plan || 'free',
-                trial_start_date: privateConfig.trial_start_date,
+                is_trial: !!privateConfig.is_trial,
                 days_remaining: daysRemaining
             }
         } 
