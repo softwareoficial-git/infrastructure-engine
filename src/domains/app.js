@@ -39,11 +39,16 @@ class AppDomain {
       trial_start_date: now
     };
 
-    const clientRes = await dbClient.query(
-      'INSERT INTO clientes (nombre, public_config, private_config, created_at) VALUES ($1, $2, $3, $4) RETURNING *',
-      [nombre, initialConfig, JSON.stringify(privateConfig), now]
-    );
-    return clientRes.rows[0];
+    try {
+      const clientRes = await dbClient.query(
+        'INSERT INTO clientes (nombre, public_config, private_config, created_at) VALUES ($1, $2, $3, $4) RETURNING *',
+        [nombre, initialConfig, JSON.stringify(privateConfig), now]
+      );
+      return clientRes.rows[0];
+    } catch (error) {
+      console.error('Error al insertar cliente:', error.message);
+      throw new EngineError('DB_INSERT_ERROR', error.message);
+    }
   }
 
   static schemas = {
