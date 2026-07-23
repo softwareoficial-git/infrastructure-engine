@@ -98,6 +98,9 @@ class SystemDomain {
       required: ['userId'],
     },
     'clients-status-report': {
+      type: 'object',
+      properties: {},
+      required: [],
       description: 'Generates a masive report of all clients and their subscription status.',
       errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL'],
     },
@@ -179,6 +182,9 @@ class SystemDomain {
       errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL', 'USER_NOT_FOUND'],
     },
     'clients-status-report': {
+      type: 'object',
+      properties: {},
+      required: [],
       description: 'Generates a masive report of all clients and their subscription status.',
       errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL'],
     },
