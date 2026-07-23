@@ -190,12 +190,39 @@ class UserDomain {
     'get-profile': async function (user) {
       console.log(`[DEBUG] get-profile requested for user.id: ${user.id}`);
       const result = await db.query(
-        'SELECT u.id, u.username, u.cliente_id, r.nombre as role_name, c.nombre as cliente_nombre FROM usuarios u JOIN roles r ON u.role_id = r.id LEFT JOIN clientes c ON u.cliente_id = c.id WHERE u.id = $1',
+        `SELECT u.id, u.username, u.cliente_id, r.nombre as role_name, c.nombre as cliente_nombre, c.private_config, c.created_at 
+         FROM usuarios u 
+         JOIN roles r ON u.role_id = r.id 
+         LEFT JOIN clientes c ON u.cliente_id = c.id 
+         WHERE u.id = $1`,
         [user.id]
       );
 
       if (result.rows.length === 0) throw new EngineError('USER_NOT_FOUND', { id: user.id });
-      return { status: 'success', profile: result.rows[0] };
+
+      const profile = result.rows[0];
+      const privateConfig = profile.private_config || {};
+      
+      // Calcular días restantes de trial
+      let daysRemaining = null;
+      if (privateConfig.plan === 'pro' && privateConfig.trial_start_date) {
+        const trialStart = new Date(privateConfig.trial_start_date);
+        const now = new Date();
+        const diffDays = Math.floor((now - trialStart) / (1000 * 60 * 60 * 24));
+        daysRemaining = Math.max(0, 30 - diffDays);
+      }
+
+      return { 
+        status: 'success', 
+        profile: {
+            ...profile,
+            subscription: {
+                plan: privateConfig.plan || 'free',
+                trial_start_date: privateConfig.trial_start_date,
+                days_remaining: daysRemaining
+            }
+        } 
+      };
     },
 
     read: async function (user, payload) {
