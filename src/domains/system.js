@@ -689,7 +689,13 @@ class SystemDomain {
         LEFT JOIN usuarios u ON c.id = u.cliente_id AND u.role_id = (SELECT id FROM roles WHERE nombre = 'DUEÑO')
       `;
       
-      const result = await (txClient || db).query(query);
+      let result;
+      try {
+        result = await (txClient || db).query(query);
+      } catch (dbError) {
+        console.error('Error al ejecutar query en clients-status-report:', dbError);
+        throw new EngineError('DB_ERROR', dbError.message);
+      }
 
       const report = result.rows.map(client => {
         try {
