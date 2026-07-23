@@ -33,9 +33,15 @@ class AppDomain {
       employees: [],
     };
 
+    const now = new Date().toISOString();
+    const privateConfig = {
+      plan: 'pro',
+      trial_start_date: now
+    };
+
     const clientRes = await dbClient.query(
-      'INSERT INTO clientes (nombre, public_config, private_config) VALUES ($1, $2, $3) RETURNING *',
-      [nombre, initialConfig, JSON.stringify({ plan: 'free' })]
+      'INSERT INTO clientes (nombre, public_config, private_config, created_at) VALUES ($1, $2, $3, $4) RETURNING *',
+      [nombre, initialConfig, JSON.stringify(privateConfig), now]
     );
     return clientRes.rows[0];
   }
