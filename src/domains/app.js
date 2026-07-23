@@ -46,8 +46,9 @@ class AppDomain {
       );
       return clientRes.rows[0];
     } catch (error) {
-      console.error('Error al insertar cliente:', error.message);
-      throw new EngineError('DB_INSERT_ERROR', error.message);
+      const dbError = error.detail || error.message || 'Error desconocido';
+      console.error('Error al insertar cliente:', { message: error.message, detail: error.detail, code: error.code });
+      throw new EngineError('DB_INSERT_ERROR', dbError);
     }
   }
 
