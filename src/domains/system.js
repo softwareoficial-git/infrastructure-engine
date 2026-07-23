@@ -818,6 +818,15 @@ class SystemDomain {
         console.log('✅ Migration v7 completed.');
       }
 
+      if (currentVersion < 9 && targetVersion >= 9) {
+        console.log('Applying Migration v9: Ensuring created_at in clientes...');
+        await client.query(`
+          ALTER TABLE clientes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        `);
+        await client.query('UPDATE clientes SET schema_version = 9');
+        console.log('✅ Migration v9 completed.');
+      }
+
       return {
         status: 'success',
         from: currentVersion,
