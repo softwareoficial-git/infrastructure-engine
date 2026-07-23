@@ -678,7 +678,7 @@ class SystemDomain {
 
     'clients-status-report': async function (user, payload, txClient = null) {
       if (user.role_name !== 'SUPER_ADMIN' && user.role_name !== 'ADMINISTRADOR') {
-        throw new EngineError('ACCESO_DENEGADO_ROL', 'Solo administradores.');
+        return { status: 'error', message: 'Solo administradores.' };
       }
 
       const query = `
@@ -693,12 +693,11 @@ class SystemDomain {
       try {
         result = await (txClient || db).query(query);
       } catch (dbError) {
-        console.error('Error al ejecutar query en clients-status-report:', dbError);
-        throw new EngineError('DB_ERROR', dbError.message);
+        return { status: 'error', message: 'DB_ERROR', detail: dbError.message, stack: dbError.stack };
       }
 
-      const report = result.rows.map(client => {
-        try {
+      try {
+        const report = result.rows.map(client => {
           const pc = client.private_config || {};
           let daysRemaining = null;
           
@@ -730,13 +729,11 @@ class SystemDomain {
               created_at: client.created_at
             }
           };
-        } catch (err) {
-          console.error(`Error procesando cliente ID ${client.id}:`, err);
-          return { id: client.id, error: 'Error procesando datos' };
-        }
-      });
-
-      return { status: 'success', data: report };
+        });
+        return { status: 'success', data: report };
+      } catch (mapError) {
+        return { status: 'error', message: 'MAP_ERROR', detail: mapError.message };
+      }
     },
 
     'events-clear': async function (user, payload, txClient = null) {
