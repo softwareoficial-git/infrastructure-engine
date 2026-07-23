@@ -288,8 +288,15 @@ class SystemDomain {
       const client = txClient || db;
       
       // Automatización: Ejecutar migraciones automáticamente
-      await SystemDomain._runMigrations(client, 9);
-      console.log('✅ Migraciones automáticas completadas.');
+      // Nota: Aquí definimos la última versión deseada.
+      // Actualmente la última migración implementada es la v9.
+      try {
+        await SystemDomain._runMigrations(client, 9);
+        console.log('✅ Migraciones automáticas completadas.');
+      } catch (err) {
+        console.error('❌ Error en migraciones automáticas:', err);
+        throw err;
+      }
 
       const tasks = {
         infra: [
