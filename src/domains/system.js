@@ -97,6 +97,10 @@ class SystemDomain {
       },
       required: ['userId'],
     },
+    'clients-status-report': {
+      description: 'Generates a masive report of all clients and their subscription status.',
+      errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL'],
+    },
     'events-clear': {
       type: 'object',
       properties: {
@@ -174,6 +178,10 @@ class SystemDomain {
       description: 'Deletes a specific user by ID. Restricted to SUPER_ADMIN.',
       errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL', 'USER_NOT_FOUND'],
     },
+    'clients-status-report': {
+      description: 'Generates a masive report of all clients and their subscription status.',
+      errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL'],
+    },
     'events-clear': {
       description: 'Deletes old events to maintain performance.',
       errors: ['DB_ERROR'],
@@ -193,8 +201,57 @@ class SystemDomain {
     },
   };
 
+  static async _runMigrations(client, targetVersion) {
+    const versionCheck = await client.query('SELECT schema_version FROM clientes LIMIT 1');
+    const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
+
+    console.log(`Migrating schema from v${currentVersion} to v${targetVersion}...`);
+
+    if (currentVersion < 2 && targetVersion >= 2) {
+      console.log('Applying Migration v2: Ensuring official template exists...');
+      const existing = await client.query('SELECT id FROM plantillas WHERE es_oficial = true LIMIT 1');
+      if (existing.rows.length === 0) {
+        await client.query(
+          `INSERT INTO plantillas (nombre, contenido, es_oficial) VALUES ($1, $2, true)`,
+          ['Official Default Template', JSON.stringify({ stock: [], precios: {}, categorias: [] })]
+        );
+      }
+      await client.query('UPDATE clientes SET schema_version = 2');
+    }
+    if (currentVersion < 3 && targetVersion >= 3) {
+      console.log('Applying Migration v3: Creating system_events table...');
+      await client.query(`CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
+      await client.query('CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id); CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id); CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at); CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);');
+      await client.query('UPDATE clientes SET schema_version = 3');
+    }
+    if (currentVersion < 5 && targetVersion >= 5) {
+        await client.query(`UPDATE clientes SET public_config = '{}' WHERE public_config IS NULL; ALTER TABLE clientes ALTER COLUMN public_config SET DEFAULT '{}'::jsonb; ALTER TABLE clientes ALTER COLUMN public_config SET NOT NULL;`);
+        await client.query('UPDATE clientes SET schema_version = 5');
+    }
+    if (currentVersion < 6 && targetVersion >= 6) {
+        await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
+        await client.query(`CREATE TABLE IF NOT EXISTS logs_trafico (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id INTEGER NOT NULL, visit_type VARCHAR(50), url TEXT, referrer TEXT, user_agent TEXT, language VARCHAR(10), request_id VARCHAR(100), ip_address VARCHAR(45), timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255), browser VARCHAR(50), os VARCHAR(50), device_type VARCHAR(50));`);
+        await client.query(`CREATE TABLE IF NOT EXISTS geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));`);
+        await client.query('UPDATE clientes SET schema_version = 6');
+    }
+    if (currentVersion < 7 && targetVersion >= 7) {
+        await client.query('INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', ['ADMINISTRADOR']);
+        await client.query('INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', ['DUEÑO']);
+        await client.query('INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', ['EMPLEADO']);
+        await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos JSONB DEFAULT '[]'");
+        await client.query('UPDATE clientes SET schema_version = 7');
+    }
+    if (currentVersion < 9 && targetVersion >= 9) {
+        await client.query(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+        await client.query('UPDATE clientes SET schema_version = 9');
+    }
+    return { from: currentVersion, to: targetVersion };
+  }
+
   static commands = {
     batch: async function (user, payload, txClient = null) {
+        // ... (resto de commands)
+
       // If already in a transaction, we just execute sequentially without a new transaction
       if (txClient) {
         const results = [];
@@ -229,6 +286,10 @@ class SystemDomain {
       console.log('🚀 Iniciando Bootstrapping Resiliente del Sistema...');
       const { hashPassword } = require('../utils/security');
       const client = txClient || db;
+      
+      // Automatización: Ejecutar migraciones automáticamente
+      await SystemDomain._runMigrations(client, 9);
+      console.log('✅ Migraciones automáticas completadas.');
 
       const tasks = {
         infra: [
@@ -606,6 +667,58 @@ class SystemDomain {
       }
 
       return { status: 'success', message: 'Usuario eliminado correctamente.' };
+    },
+
+    'clients-status-report': async function (user, payload, txClient = null) {
+      if (user.role_name !== 'SUPER_ADMIN' && user.role_name !== 'ADMINISTRADOR') {
+        throw new EngineError('ACCESO_DENEGADO_ROL', 'Solo administradores.');
+      }
+
+      const query = `
+        SELECT 
+          c.id, c.nombre, c.private_config, c.created_at,
+          u.username as owner_username
+        FROM clientes c
+        LEFT JOIN usuarios u ON c.id = u.cliente_id AND u.role_id = (SELECT id FROM roles WHERE nombre = 'DUEÑO')
+      `;
+      
+      const result = await (txClient || db).query(query);
+
+      const report = result.rows.map(client => {
+        const pc = client.private_config || {};
+        let daysRemaining = null;
+        
+        if (pc.plan === 'pro') {
+          const now = new Date();
+          let referenceDate;
+          if (pc.is_trial) {
+            referenceDate = new Date(pc.trial_end_date);
+            daysRemaining = Math.max(0, Math.floor((referenceDate - now) / (1000 * 60 * 60 * 24)));
+          } else if (pc.last_payment_date) {
+            referenceDate = new Date(pc.last_payment_date);
+            const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+            daysRemaining = Math.max(0, 30 - diffDays);
+          } else {
+            referenceDate = new Date(client.created_at);
+            const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+            daysRemaining = Math.max(0, 30 - diffDays);
+          }
+        }
+
+        return {
+          id: client.id,
+          nombre: client.nombre,
+          owner: client.owner_username,
+          subscription: {
+            plan: pc.plan || 'free',
+            is_trial: !!pc.is_trial,
+            days_remaining: daysRemaining,
+            created_at: client.created_at
+          }
+        };
+      });
+
+      return { status: 'success', data: report };
     },
 
     'events-clear': async function (user, payload, txClient = null) {
