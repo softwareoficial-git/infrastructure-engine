@@ -692,37 +692,42 @@ class SystemDomain {
       const result = await (txClient || db).query(query);
 
       const report = result.rows.map(client => {
-        const pc = client.private_config || {};
-        let daysRemaining = null;
-        
-        if (pc.plan === 'pro') {
-          const now = new Date();
-          let referenceDate;
-          if (pc.is_trial) {
-            referenceDate = new Date(pc.trial_end_date);
-            daysRemaining = Math.max(0, Math.floor((referenceDate - now) / (1000 * 60 * 60 * 24)));
-          } else if (pc.last_payment_date) {
-            referenceDate = new Date(pc.last_payment_date);
-            const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
-            daysRemaining = Math.max(0, 30 - diffDays);
-          } else {
-            referenceDate = new Date(client.created_at);
-            const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
-            daysRemaining = Math.max(0, 30 - diffDays);
+        try {
+          const pc = client.private_config || {};
+          let daysRemaining = null;
+          
+          if (pc && pc.plan === 'pro') {
+            const now = new Date();
+            let referenceDate;
+            if (pc.is_trial && pc.trial_end_date) {
+              referenceDate = new Date(pc.trial_end_date);
+              daysRemaining = Math.max(0, Math.floor((referenceDate - now) / (1000 * 60 * 60 * 24)));
+            } else if (pc.last_payment_date) {
+              referenceDate = new Date(pc.last_payment_date);
+              const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+              daysRemaining = Math.max(0, 30 - diffDays);
+            } else if (client.created_at) {
+              referenceDate = new Date(client.created_at);
+              const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+              daysRemaining = Math.max(0, 30 - diffDays);
+            }
           }
-        }
 
-        return {
-          id: client.id,
-          nombre: client.nombre,
-          owner: client.owner_username,
-          subscription: {
-            plan: pc.plan || 'free',
-            is_trial: !!pc.is_trial,
-            days_remaining: daysRemaining,
-            created_at: client.created_at
-          }
-        };
+          return {
+            id: client.id,
+            nombre: client.nombre,
+            owner: client.owner_username,
+            subscription: {
+              plan: pc.plan || 'free',
+              is_trial: !!pc.is_trial,
+              days_remaining: daysRemaining,
+              created_at: client.created_at
+            }
+          };
+        } catch (err) {
+          console.error(`Error procesando cliente ID ${client.id}:`, err);
+          return { id: client.id, error: 'Error procesando datos' };
+        }
       });
 
       return { status: 'success', data: report };
