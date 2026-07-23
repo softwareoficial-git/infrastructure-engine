@@ -177,6 +177,26 @@ class Motor {
 
     const cmdConfig = this.commands[domain][action];
 
+    // --- VALIDACIÓN DE SUSCRIPCIÓN (Trial 30 días) ---
+    if (user && user.cliente_id && domain !== 'USER' && action !== 'login') {
+      const clientRes = await db.query('SELECT private_config, created_at FROM clientes WHERE id = $1', [user.cliente_id]);
+      if (clientRes.rows.length > 0) {
+        const { private_config, created_at } = clientRes.rows[0];
+        if (private_config.plan === 'pro' && private_config.trial_start_date) {
+          const trialStart = new Date(private_config.trial_start_date);
+          const now = new Date();
+          const diffDays = (now - trialStart) / (1000 * 60 * 60 * 24);
+          if (diffDays > 30) {
+            console.log(`⚠️ Trial expirado para cliente ${user.cliente_id}. Degradando a 'free'.`);
+            await db.query(
+              "UPDATE clientes SET private_config = private_config || jsonb_build_object('plan', 'free') WHERE id = $1",
+              [user.cliente_id]
+            );
+          }
+        }
+      }
+    }
+
     await this.authorize(user, domain, action);
 
     // Resolve target tenant based on role and payload
