@@ -179,17 +179,17 @@ class Motor {
 
     // --- VALIDACIÓN DE SUSCRIPCIÓN (Trial 30 días) ---
     if (user && user.cliente_id && domain !== 'USER' && action !== 'login') {
-      const clientRes = await db.query('SELECT private_config, created_at FROM clientes WHERE id = $1', [user.cliente_id]);
+      const clientRes = await db.query('SELECT private_config FROM clientes WHERE id = $1', [user.cliente_id]);
       if (clientRes.rows.length > 0) {
-        const { private_config, created_at } = clientRes.rows[0];
-        if (private_config.plan === 'pro' && private_config.trial_start_date) {
-          const trialStart = new Date(private_config.trial_start_date);
+        const { private_config } = clientRes.rows[0];
+        if (private_config.plan === 'pro' && private_config.is_trial) {
+          const trialEnd = new Date(private_config.trial_end_date);
           const now = new Date();
-          const diffDays = (now - trialStart) / (1000 * 60 * 60 * 24);
-          if (diffDays > 30) {
+          
+          if (now > trialEnd) {
             console.log(`⚠️ Trial expirado para cliente ${user.cliente_id}. Degradando a 'free'.`);
             await db.query(
-              "UPDATE clientes SET private_config = private_config || jsonb_build_object('plan', 'free') WHERE id = $1",
+              "UPDATE clientes SET private_config = private_config || '{\"plan\": \"free\", \"is_trial\": false}'::jsonb WHERE id = $1",
               [user.cliente_id]
             );
           }

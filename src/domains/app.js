@@ -33,16 +33,18 @@ class AppDomain {
       employees: [],
     };
 
-    const now = new Date().toISOString();
+    const now = new Date();
+    const trialEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const privateConfig = {
       plan: 'pro',
-      trial_start_date: now
+      is_trial: true,
+      trial_end_date: trialEndDate.toISOString()
     };
 
     try {
       const clientRes = await dbClient.query(
         'INSERT INTO clientes (nombre, public_config, private_config, created_at) VALUES ($1, $2, $3, $4) RETURNING *',
-        [nombre, initialConfig, JSON.stringify(privateConfig), now]
+        [nombre, initialConfig, JSON.stringify(privateConfig), now.toISOString()]
       );
       return clientRes.rows[0];
     } catch (error) {
