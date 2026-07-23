@@ -90,6 +90,13 @@ class SystemDomain {
       },
       required: [],
     },
+    'user-delete': {
+      type: 'object',
+      properties: {
+        userId: { type: 'integer' },
+      },
+      required: ['userId'],
+    },
     'events-clear': {
       type: 'object',
       properties: {
@@ -162,6 +169,10 @@ class SystemDomain {
     'events-user-activity': {
       description: 'Analyzes the behavior and most used commands of a specific user.',
       errors: ['DB_ERROR'],
+    },
+    'user-delete': {
+      description: 'Deletes a specific user by ID. Restricted to SUPER_ADMIN.',
+      errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL', 'USER_NOT_FOUND'],
     },
     'events-clear': {
       description: 'Deletes old events to maintain performance.',
@@ -574,6 +585,27 @@ class SystemDomain {
 
       const result = await (txClient || db).query(query, [userId, limit]);
       return { status: 'success', activity: result.rows };
+    },
+
+    'user-delete': async function (user, payload, txClient = null) {
+      // 1. Validar permisos
+      if (user.role_name !== 'SUPER_ADMIN') {
+        throw new EngineError('ACCESO_DENEGADO_ROL', 'Solo los SUPER_ADMIN pueden eliminar usuarios.');
+      }
+
+      const { userId } = payload;
+
+      // 2. Ejecutar eliminación
+      const result = await (txClient || db).query(
+        'DELETE FROM usuarios WHERE id = $1',
+        [userId]
+      );
+
+      if (result.rowCount === 0) {
+        throw new EngineError('USER_NOT_FOUND', 'Usuario no encontrado.');
+      }
+
+      return { status: 'success', message: 'Usuario eliminado correctamente.' };
     },
 
     'events-clear': async function (user, payload, txClient = null) {
