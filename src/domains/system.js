@@ -102,7 +102,6 @@ class SystemDomain {
       properties: {},
       required: [],
       description: 'Generates a masive report of all clients and their subscription status.',
-      errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL'],
     },
     'events-clear': {
       type: 'object',
@@ -186,7 +185,6 @@ class SystemDomain {
       properties: {},
       required: [],
       description: 'Generates a masive report of all clients and their subscription status.',
-      errors: ['DB_ERROR', 'ACCESO_DENEGADO_ROL'],
     },
     'events-clear': {
       description: 'Deletes old events to maintain performance.',
