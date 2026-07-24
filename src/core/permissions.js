@@ -7,8 +7,8 @@
  */
 
 const ROLE_PERMISSIONS = {
-  SUPER_ADMIN: ['SYSTEM:*', 'APP:*', 'CLIENT:*', 'USER:*', 'MONITOR:*', 'ANALYTICS:*'],
-  ADMINISTRADOR: ['SYSTEM:*', 'APP:*', 'CLIENT:*', 'USER:*', 'MONITOR:*', 'ANALYTICS:*'],
+  SUPER_ADMIN: ['SYSTEM:*', 'APP:*', 'CLIENT:*', 'USER:*', 'MONITOR:*', 'ANALYTICS:*', 'SYSTEM:clients-status-report'],
+  ADMINISTRADOR: ['SYSTEM:*', 'APP:*', 'CLIENT:*', 'USER:*', 'MONITOR:*', 'ANALYTICS:*', 'SYSTEM:clients-status-report'],
   DUEÑO: [
     'CLIENT:*',
     'USER:*',
