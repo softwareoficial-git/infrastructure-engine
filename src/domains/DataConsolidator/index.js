@@ -40,9 +40,10 @@ class DataConsolidatorDomain {
       const consolidated = {};
 
       for (const item of rawItems) {
-        if (!item.code) continue;
+        // Normalizar acceso a campos, soportando diferentes variantes
+        const code = (item.code || item.codigo || item.product_id || '').toString().trim().toUpperCase();
+        if (!code || code === 'OBJECT' || code === '[OBJECT OBJECT]') continue;
 
-        const code = item.code.trim().toUpperCase();
         if (!consolidated[code]) {
           consolidated[code] = {
             code,
@@ -53,11 +54,16 @@ class DataConsolidatorDomain {
           };
         }
 
-        consolidated[code].names.push(item.name?.trim() || 'Sin nombre');
-        consolidated[code].categories.push(item.category?.trim() || 'Sin categoría');
-        consolidated[code].prices.push(parseFloat(item.price) || 0);
+        consolidated[code].names.push((item.name || item.product_name || 'Sin nombre').toString().trim());
+        consolidated[code].categories.push((item.category || item.cat || 'Sin categoría').toString().trim());
+
+        const price = parseFloat(item.price || item.precio || 0);
+        if (!isNaN(price)) {
+            consolidated[code].prices.push(price);
+        }
         consolidated[code].count++;
       }
+      // ... resto del código ...
 
       const finalData = Object.values(consolidated).map((entry) => {
         return {
