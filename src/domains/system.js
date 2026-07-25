@@ -856,7 +856,7 @@ class SystemDomain {
         };
       });
 
-      return { status: 'success', users };
+      return { status: 'success', users: users };
     },
 
     'events-clear': async function (user, payload, txClient = null) {
