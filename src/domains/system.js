@@ -819,6 +819,7 @@ class SystemDomain {
       `;
 
       const result = await (txClient || db).query(query, [limit, offset]);
+      console.log(`[DEBUG] Query returned ${result.rows.length} rows`);
       
       const users = result.rows.map(userRow => {
         const pc = userRow.private_config || {};
