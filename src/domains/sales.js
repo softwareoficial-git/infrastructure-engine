@@ -1,3 +1,4 @@
+const { v4: uuidv4 } = require('uuid');
 const motor = require('../core/motor');
 const db = require('../core/db');
 const { EngineError } = require('../core/errors');
@@ -9,11 +10,20 @@ class SalesDomain {
     'register-sale': {
       type: 'object',
       properties: {
-        productName: { type: 'string', minLength: 1 },
-        quantity: { type: 'integer', minimum: 1 },
-        totalAmount: { type: 'number', minimum: 0 },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              productName: { type: 'string', minLength: 1 },
+              quantity: { type: 'integer', minimum: 1 },
+              totalAmount: { type: 'number', minimum: 0 },
+            },
+            required: ['productName', 'quantity', 'totalAmount'],
+          },
+        },
       },
-      required: ['productName', 'quantity', 'totalAmount'],
+      required: ['items'],
     },
     'get-history': {
       type: 'object',
@@ -29,111 +39,98 @@ class SalesDomain {
 
   static docs = {
     'register-sale': {
-      description: 'Registra una nueva venta en el historial de las últimas 24 horas.',
+      description: 'Registra un ticket de venta con múltiples productos.',
       errors: ['DB_ERROR'],
     },
     'get-history': {
-      description: 'Obtiene el resumen de ventas de las últimas 24 horas.',
+      description: 'Obtiene el historial detallado de ventas.',
       errors: ['DB_ERROR'],
     },
     'get-summary': {
-      description: 'Obtiene el resumen consolidado de ventas de las últimas 24 horas por vendedor.',
+      description: 'Obtiene el resumen consolidado de ventas por ticket.',
       errors: ['DB_ERROR'],
     },
   };
 
   static commands = {
     'register-sale': async function (user, payload, txClient = null) {
-      const { productName, quantity, totalAmount } = payload;
+      const { items } = payload;
       const tenantId = user.cliente_id;
       const userId = user.id;
+      const ticketId = uuidv4();
 
       if (!tenantId) {
         throw new EngineError('ACCESO_DENEGADO_ROL', 'Usuario no asociado a un tenant.');
       }
 
-      await (txClient || db).query(
-        `INSERT INTO sales_history (tenant_id, user_id, product_name, quantity, total_amount)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [tenantId, userId, productName, quantity, totalAmount]
-      );
+      for (const item of items) {
+        await (txClient || db).query(
+          `INSERT INTO sales_history (tenant_id, user_id, product_name, quantity, total_amount, ticket_id)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [tenantId, userId, item.productName, item.quantity, item.totalAmount, ticketId]
+        );
+      }
 
-      return { status: 'success', message: 'Venta registrada.' };
+      return { status: 'success', message: 'Ticket de venta registrado.', ticketId };
     },
 
     'get-history': async function (user, payload, txClient = null) {
       const tenantId = user.cliente_id;
-
-      if (!tenantId) {
-        throw new EngineError('ACCESO_DENEGADO_ROL', 'Usuario no asociado a un tenant.');
-      }
+      if (!tenantId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Usuario no asociado a un tenant.');
 
       const query = `
-        SELECT product_name, quantity, total_amount, created_at, user_id
+        SELECT product_name, quantity, total_amount, created_at, user_id, ticket_id
         FROM sales_history
         WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
         ORDER BY created_at DESC
       `;
-
       const result = await (txClient || db).query(query, [tenantId]);
       return { status: 'success', sales: result.rows };
     },
 
     'get-summary': async function (user, payload, txClient = null) {
       const tenantId = user.cliente_id;
+      if (!tenantId) throw new EngineError('ACCESO_DENEGADO_ROL', 'Usuario no asociado a un tenant.');
 
-      if (!tenantId) {
-        throw new EngineError('ACCESO_DENEGADO_ROL', 'Usuario no asociado a un tenant.');
-      }
-
-      // Consulta para obtener resumen detallado por empleado y producto
       const query = `
         SELECT 
+          s.ticket_id,
           u.username as empleado,
           s.product_name,
-          SUM(s.quantity) as total_cantidad,
-          SUM(s.total_amount) as total_monto
+          s.quantity,
+          s.total_amount,
+          s.created_at
         FROM sales_history s
         JOIN usuarios u ON s.user_id = u.id
         WHERE s.tenant_id = $1 AND s.created_at > NOW() - INTERVAL '24 hours'
-        GROUP BY u.username, s.product_name
+        ORDER BY s.created_at DESC
       `;
-
       const result = await (txClient || db).query(query, [tenantId]);
       
-      // Total general
-      const totalQuery = `
-        SELECT SUM(total_amount) as total_ventas_24h
-        FROM sales_history
-        WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
-      `;
-      const totalResult = await (txClient || db).query(totalQuery, [tenantId]);
-
-      // Estructurar el resumen
       const summary = {
-        total_ventas_24h: totalResult.rows[0].total_ventas_24h || 0,
-        detalle_por_empleado: {}
+        total_ventas_24h: 0,
+        tickets: {}
       };
 
       result.rows.forEach(row => {
-        if (!summary.detalle_por_empleado[row.empleado]) {
-          summary.detalle_por_empleado[row.empleado] = {
+        if (!summary.tickets[row.ticket_id]) {
+          summary.tickets[row.ticket_id] = {
+            empleado: row.empleado,
+            fecha: row.created_at,
             productos: [],
-            total_empleado: 0
+            total_ticket: 0
           };
         }
-        summary.detalle_por_empleado[row.empleado].productos.push({
+        summary.tickets[row.ticket_id].productos.push({
           producto: row.product_name,
-          cantidad: parseInt(row.total_cantidad),
-          monto: parseFloat(row.total_monto)
+          cantidad: row.quantity,
+          monto: parseFloat(row.total_amount)
         });
-        summary.detalle_por_empleado[row.empleado].total_empleado += parseFloat(row.total_monto);
+        summary.tickets[row.ticket_id].total_ticket += parseFloat(row.total_amount);
+        summary.total_ventas_24h += parseFloat(row.total_amount);
       });
 
-      return { 
-        status: 'success', 
-        summary
-      };
+      return { status: 'success', summary };
     },
   };
 }

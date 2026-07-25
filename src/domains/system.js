@@ -266,6 +266,15 @@ class SystemDomain {
         await client.query('UPDATE clientes SET schema_version = 10');
         console.log('✅ Migration v10 completed.');
     }
+    if (currentVersion < 11 && targetVersion >= 11) {
+        console.log('Applying Migration v11: Adding ticket_id to sales_history...');
+        await client.query(`
+          ALTER TABLE sales_history ADD COLUMN IF NOT EXISTS ticket_id UUID;
+          CREATE INDEX IF NOT EXISTS idx_sales_ticket ON sales_history(ticket_id);
+        `);
+        await client.query('UPDATE clientes SET schema_version = 11');
+        console.log('✅ Migration v11 completed.');
+    }
     return { from: currentVersion, to: targetVersion };
   }
 
@@ -310,9 +319,9 @@ class SystemDomain {
       
       // Automatización: Ejecutar migraciones automáticamente
       // Nota: Aquí definimos la última versión deseada.
-      // Actualmente la última migración implementada es la v10.
+      // Actualmente la última migración implementada es la v11.
       try {
-        await SystemDomain._runMigrations(client, 10);
+        await SystemDomain._runMigrations(client, 11);
         console.log('✅ Migraciones automáticas completadas.');
       } catch (err) {
         console.error('❌ Error en migraciones automáticas:', err);
