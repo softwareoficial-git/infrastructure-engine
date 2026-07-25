@@ -249,6 +249,23 @@ class SystemDomain {
         await client.query(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
         await client.query('UPDATE clientes SET schema_version = 9');
     }
+    if (currentVersion < 10 && targetVersion >= 10) {
+        console.log('Applying Migration v10: Creating sales_history table...');
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS sales_history (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            product_name TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            total_amount NUMERIC(10, 2) NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          );
+          CREATE INDEX IF NOT EXISTS idx_sales_tenant_created ON sales_history(tenant_id, created_at);
+        `);
+        await client.query('UPDATE clientes SET schema_version = 10');
+        console.log('✅ Migration v10 completed.');
+    }
     return { from: currentVersion, to: targetVersion };
   }
 
@@ -293,9 +310,9 @@ class SystemDomain {
       
       // Automatización: Ejecutar migraciones automáticamente
       // Nota: Aquí definimos la última versión deseada.
-      // Actualmente la última migración implementada es la v9.
+      // Actualmente la última migración implementada es la v10.
       try {
-        await SystemDomain._runMigrations(client, 9);
+        await SystemDomain._runMigrations(client, 10);
         console.log('✅ Migraciones automáticas completadas.');
       } catch (err) {
         console.error('❌ Error en migraciones automáticas:', err);
@@ -346,6 +363,19 @@ class SystemDomain {
           {
             name: 'Tabla de GeoIP',
             sql: 'CREATE TABLE IF NOT EXISTS geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));',
+          },
+          {
+            name: 'Tabla de Historial de Ventas',
+            sql: `CREATE TABLE IF NOT EXISTS sales_history (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    product_name TEXT NOT NULL,
+                    quantity INTEGER NOT NULL,
+                    total_amount NUMERIC(10, 2) NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                  );
+                  CREATE INDEX IF NOT EXISTS idx_sales_tenant_created ON sales_history(tenant_id, created_at);`,
           },
           {
             name: 'Índices de Optimización',
