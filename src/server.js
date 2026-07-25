@@ -13,6 +13,7 @@ require('./domains/client');
 require('./domains/user');
 require('./domains/monitor');
 require('./domains/analytics');
+require('./domains/DataConsolidator');
 
 const app = express();
 
