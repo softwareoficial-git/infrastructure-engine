@@ -68,9 +68,10 @@ class DataConsolidatorDomain {
       const finalData = Object.values(consolidated).map((entry) => {
         return {
           code: entry.code,
-          suggested_name: this.getMode(entry.names),
-          suggested_category: this.getMode(entry.categories),
-          average_price: entry.prices.reduce((a, b) => a + b, 0) / entry.prices.length,
+          suggested_name: DataConsolidatorDomain.getMode(entry.names),
+          suggested_category: DataConsolidatorDomain.getMode(entry.categories),
+          average_price:
+            entry.prices.reduce((a, b) => a + b, 0) / entry.prices.length,
           source_count: entry.count,
         };
       });
