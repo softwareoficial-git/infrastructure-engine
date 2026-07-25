@@ -7,14 +7,8 @@ const { sanitizeObject } = require('./utils/security');
 
 // Import domains to register commands
 require('./domains/system');
-require('./domains/system_config');
 require('./domains/app');
-require('./domains/client');
 require('./domains/user');
-require('./domains/monitor');
-require('./domains/analytics');
-require('./domains/DataConsolidator');
-require('./domains/sales');
 
 const app = express();
 
