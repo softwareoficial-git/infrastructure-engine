@@ -90,6 +90,11 @@ class UserDomain {
         offset: { type: 'integer', default: 0 },
       },
     },
+    'get-subscription-status': {
+      type: 'object',
+      description: "Returns the authenticated user's client subscription status.",
+      properties: {},
+    },
     'atomic-push-item': {
       type: 'object',
       description: 'Atomically appends an item to a JSONB array.',
@@ -467,6 +472,37 @@ class UserDomain {
       }
 
       return { status: 'success', message: 'Session revoked successfully.' };
+    },
+
+    'get-subscription-status': async function (user, payload) {
+      const clientRes = await db.query('SELECT private_config FROM clientes WHERE id = $1', [user.cliente_id]);
+      if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      
+      const pc = clientRes.rows[0].private_config || {};
+      let daysRemaining = 0;
+      let status = 'active';
+
+      if (pc && pc.plan === 'pro' && pc.last_payment_date) {
+          const now = new Date();
+          const startDate = new Date(pc.last_payment_date);
+          const months = pc.meses_contratados || 1;
+          const endDate = new Date(startDate);
+          endDate.setMonth(endDate.getMonth() + months);
+          
+          daysRemaining = Math.max(0, Math.floor((endDate - now) / (1000 * 60 * 60 * 24)));
+          
+          if (daysRemaining <= 0) status = 'expired';
+          else if (daysRemaining <= 7) status = 'warning';
+      }
+      
+      return {
+        status: 'success',
+        subscription: {
+          plan: pc.plan || 'free',
+          days_remaining: daysRemaining,
+          status: status
+        }
+      };
     },
   };
 }

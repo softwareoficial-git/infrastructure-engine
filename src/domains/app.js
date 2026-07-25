@@ -219,7 +219,8 @@ class AppDomain {
         plan,
         is_trial: !!esPrueba,
         last_payment_date: lastPaymentDate,
-        trial_end_date: trialEndDate
+        trial_end_date: trialEndDate,
+        meses_contratados: meses
       };
 
       const result = await db.query(

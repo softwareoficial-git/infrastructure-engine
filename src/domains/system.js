@@ -819,27 +819,27 @@ class SystemDomain {
       `;
 
       const result = await (txClient || db).query(query, [limit, offset]);
-      console.log(`[DEBUG] Query returned ${result.rows.length} rows`);
       
       const users = result.rows.map(userRow => {
         const pc = userRow.private_config || {};
-        let daysRemaining = null;
-        if (pc && pc.plan === 'pro') {
+        let daysRemaining = 0;
+        let status = 'active';
+
+        if (pc && pc.plan === 'pro' && pc.last_payment_date) {
             const now = new Date();
-            let referenceDate;
-            if (pc.is_trial && pc.trial_end_date) {
-                referenceDate = new Date(pc.trial_end_date);
-                daysRemaining = Math.max(0, Math.floor((referenceDate - now) / (1000 * 60 * 60 * 24)));
-            } else if (pc.last_payment_date) {
-                referenceDate = new Date(pc.last_payment_date);
-                const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
-                daysRemaining = Math.max(0, 30 - diffDays);
-            } else if (userRow.client_created_at) {
-                referenceDate = new Date(userRow.client_created_at);
-                const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
-                daysRemaining = Math.max(0, 30 - diffDays);
-            }
+            const startDate = new Date(pc.last_payment_date);
+            const months = pc.meses_contratados || 1;
+            const endDate = new Date(startDate);
+            endDate.setMonth(endDate.getMonth() + months);
+            
+            daysRemaining = Math.max(0, Math.floor((endDate - now) / (1000 * 60 * 60 * 24)));
+            
+            if (daysRemaining <= 0) status = 'expired';
+            else if (daysRemaining <= 7) status = 'warning';
+        } else if (pc && pc.plan === 'free') {
+          status = 'active'; // O 'inactive' dependiendo de la lógica de negocio
         }
+
         return {
           user_id: userRow.user_id,
           username: userRow.username,
@@ -850,6 +850,7 @@ class SystemDomain {
               plan: pc.plan || 'free',
               is_trial: !!pc.is_trial,
               days_remaining: daysRemaining,
+              status: status,
               created_at: userRow.client_created_at
             }
           }
