@@ -842,7 +842,6 @@ class SystemDomain {
         return {
           user_id: userRow.user_id,
           username: userRow.username,
-          email: userRow.email,
           client: {
             id: userRow.client_id,
             name: userRow.client_name,
