@@ -1,6 +1,6 @@
-const motor = require('../core/motor');
-const db = require('../core/db');
-const { EngineError } = require('../core/errors');
+const motor = require('../../core/motor');
+const db = require('../../core/db');
+const { EngineError } = require('../../core/errors');
 
 class DataConsolidatorDomain {
   static domain = 'DATACONSOLIDATOR';
