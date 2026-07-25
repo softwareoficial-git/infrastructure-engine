@@ -73,20 +73,6 @@ class DataConsolidatorDomain {
         };
       });
 
-      // Persistencia en master_products
-      for (const p of finalData) {
-        await db.query(`
-          INSERT INTO master_products (code, suggested_name, suggested_category, average_price, source_count)
-          VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT (code) DO UPDATE SET
-            suggested_name = EXCLUDED.suggested_name,
-            suggested_category = EXCLUDED.suggested_category,
-            average_price = EXCLUDED.average_price,
-            source_count = EXCLUDED.source_count,
-            last_updated = CURRENT_TIMESTAMP
-        `, [p.code, p.suggested_name, p.suggested_category, p.average_price, p.source_count]);
-      }
-
       return { status: 'success', data: finalData };
     },
   };
