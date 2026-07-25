@@ -475,7 +475,10 @@ class UserDomain {
     },
 
     'get-subscription-status': async function (user, payload) {
-      const clientRes = await db.query('SELECT private_config FROM clientes WHERE id = $1', [user.cliente_id]);
+      const targetClientId = payload.clienteId || user.cliente_id;
+      if (!targetClientId) throw new EngineError('CLIENT_ID_REQUIRED');
+
+      const clientRes = await db.query('SELECT private_config FROM clientes WHERE id = $1', [targetClientId]);
       if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       
       const pc = clientRes.rows[0].private_config || {};
@@ -493,6 +496,8 @@ class UserDomain {
           
           if (daysRemaining <= 0) status = 'expired';
           else if (daysRemaining <= 7) status = 'warning';
+      } else if (pc && pc.plan === 'free') {
+        status = 'active';
       }
       
       return {
