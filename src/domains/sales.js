@@ -20,6 +20,11 @@ class SalesDomain {
       properties: {},
       required: [],
     },
+    'get-summary': {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
   };
 
   static docs = {
@@ -29,6 +34,10 @@ class SalesDomain {
     },
     'get-history': {
       description: 'Obtiene el resumen de ventas de las últimas 24 horas.',
+      errors: ['DB_ERROR'],
+    },
+    'get-summary': {
+      description: 'Obtiene el resumen consolidado de ventas de las últimas 24 horas por vendedor.',
       errors: ['DB_ERROR'],
     },
   };
@@ -68,6 +77,42 @@ class SalesDomain {
 
       const result = await (txClient || db).query(query, [tenantId]);
       return { status: 'success', sales: result.rows };
+    },
+
+    'get-summary': async function (user, payload, txClient = null) {
+      const tenantId = user.cliente_id;
+
+      if (!tenantId) {
+        throw new EngineError('ACCESO_DENEGADO_ROL', 'Usuario no asociado a un tenant.');
+      }
+
+      const query = `
+        SELECT 
+          u.username as empleado,
+          COUNT(*) as productos_vendidos,
+          SUM(total_amount) as total
+        FROM sales_history s
+        JOIN usuarios u ON s.user_id = u.id
+        WHERE s.tenant_id = $1 AND s.created_at > NOW() - INTERVAL '24 hours'
+        GROUP BY u.username
+      `;
+
+      const result = await (txClient || db).query(query, [tenantId]);
+      
+      const totalQuery = `
+        SELECT SUM(total_amount) as total_ventas_24h
+        FROM sales_history
+        WHERE tenant_id = $1 AND created_at > NOW() - INTERVAL '24 hours'
+      `;
+      const totalResult = await (txClient || db).query(totalQuery, [tenantId]);
+
+      return { 
+        status: 'success', 
+        summary: {
+          total_ventas_24h: totalResult.rows[0].total_ventas_24h || 0,
+          vendedores: result.rows
+        }
+      };
     },
   };
 }
