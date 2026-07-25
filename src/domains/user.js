@@ -455,27 +455,11 @@ class UserDomain {
       };
     },
 
-    'revoke-session': async function (user, payload) {
-      const { token } = payload;
-
-      // Security: Only allow revoking sessions belonging to the user
-      const result = await db.query('DELETE FROM sesiones WHERE token = $1 AND usuario_id = $2', [
-        token,
-        user.id,
-      ]);
-
-      if (result.rowCount === 0) {
-        throw new EngineError(
-          'SESSION_NOT_FOUND',
-          'Session token not found or does not belong to this user.'
-        );
-      }
-
-      return { status: 'success', message: 'Session revoked successfully.' };
-    },
-
     'get-subscription-status': async function (user, payload) {
-      const clientRes = await db.query('SELECT private_config FROM clientes WHERE id = $1', [user.cliente_id]);
+      const targetClientId = payload.clienteId || user.cliente_id;
+      if (!targetClientId) throw new EngineError('CLIENT_ID_REQUIRED');
+
+      const clientRes = await db.query('SELECT private_config FROM clientes WHERE id = $1', [targetClientId]);
       if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
       
       const pc = clientRes.rows[0].private_config || {};
@@ -493,6 +477,43 @@ class UserDomain {
           
           if (daysRemaining <= 0) status = 'expired';
           else if (daysRemaining <= 7) status = 'warning';
+      } else if (pc && pc.plan === 'free') {
+        status = 'active';
+      }
+      
+      return {
+        status: 'success',
+        subscription: {
+          plan: pc.plan || 'free',
+          days_remaining: daysRemaining,
+          status: status
+        }
+      };
+    },
+    'get-subscription-status': async function (user, payload) {
+      const targetClientId = payload.clienteId || user.cliente_id;
+      if (!targetClientId) throw new EngineError('CLIENT_ID_REQUIRED');
+
+      const clientRes = await db.query('SELECT private_config FROM clientes WHERE id = $1', [targetClientId]);
+      if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND');
+      
+      const pc = clientRes.rows[0].private_config || {};
+      let daysRemaining = 0;
+      let status = 'active';
+
+      if (pc && pc.plan === 'pro' && pc.last_payment_date) {
+          const now = new Date();
+          const startDate = new Date(pc.last_payment_date);
+          const months = pc.meses_contratados || 1;
+          const endDate = new Date(startDate);
+          endDate.setMonth(endDate.getMonth() + months);
+          
+          daysRemaining = Math.max(0, Math.floor((endDate - now) / (1000 * 60 * 60 * 24)));
+          
+          if (daysRemaining <= 0) status = 'expired';
+          else if (daysRemaining <= 7) status = 'warning';
+      } else if (pc && pc.plan === 'free') {
+        status = 'active';
       }
       
       return {

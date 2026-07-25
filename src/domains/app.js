@@ -236,6 +236,72 @@ class AppDomain {
       };
     },
 
+    'update-subscription': async function (user, payload) {
+      const { clienteId, plan, meses, esPrueba } = payload;
+      const now = new Date();
+      const lastPaymentDate = now.toISOString();
+      
+      let trialEndDate = null;
+      if (esPrueba) {
+        const trialDate = new Date(now);
+        trialDate.setMonth(trialDate.getMonth() + meses);
+        trialEndDate = trialDate.toISOString();
+      }
+
+      const newConfig = {
+        plan,
+        is_trial: !!esPrueba,
+        last_payment_date: lastPaymentDate,
+        trial_end_date: trialEndDate,
+        meses_contratados: meses
+      };
+
+      const result = await db.query(
+        "UPDATE clientes SET private_config = private_config || $2::jsonb WHERE id = $1 RETURNING private_config",
+        [clienteId, JSON.stringify(newConfig)]
+      );
+
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
+      return {
+        status: 'success',
+        message: `Suscripción actualizada a ${plan} por ${meses} meses.`,
+        newPrivateConfig: result.rows[0].private_config,
+      };
+    },
+
+    'update-subscription': async function (user, payload) {
+      const { clienteId, plan, meses, esPrueba } = payload;
+      const now = new Date();
+      const lastPaymentDate = now.toISOString();
+      
+      let trialEndDate = null;
+      if (esPrueba) {
+        const trialDate = new Date(now);
+        trialDate.setMonth(trialDate.getMonth() + meses);
+        trialEndDate = trialDate.toISOString();
+      }
+
+      const newConfig = {
+        plan,
+        is_trial: !!esPrueba,
+        last_payment_date: lastPaymentDate,
+        trial_end_date: trialEndDate,
+        meses_contratados: meses
+      };
+
+      const result = await db.query(
+        "UPDATE clientes SET private_config = private_config || $2::jsonb WHERE id = $1 RETURNING private_config",
+        [clienteId, JSON.stringify(newConfig)]
+      );
+
+      if (result.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
+      return {
+        status: 'success',
+        message: `Suscripción actualizada a ${plan} por ${meses} meses.`,
+        newPrivateConfig: result.rows[0].private_config,
+      };
+    },
+
     'update-client-plan': async function (user, payload) {
       const { clienteId, plan } = payload;
 
