@@ -86,19 +86,22 @@ class SalesDomain {
         throw new EngineError('ACCESO_DENEGADO_ROL', 'Usuario no asociado a un tenant.');
       }
 
+      // Consulta para obtener resumen detallado por empleado y producto
       const query = `
         SELECT 
           u.username as empleado,
-          COUNT(*) as productos_vendidos,
-          SUM(total_amount) as total
+          s.product_name,
+          SUM(s.quantity) as total_cantidad,
+          SUM(s.total_amount) as total_monto
         FROM sales_history s
         JOIN usuarios u ON s.user_id = u.id
         WHERE s.tenant_id = $1 AND s.created_at > NOW() - INTERVAL '24 hours'
-        GROUP BY u.username
+        GROUP BY u.username, s.product_name
       `;
 
       const result = await (txClient || db).query(query, [tenantId]);
       
+      // Total general
       const totalQuery = `
         SELECT SUM(total_amount) as total_ventas_24h
         FROM sales_history
@@ -106,12 +109,30 @@ class SalesDomain {
       `;
       const totalResult = await (txClient || db).query(totalQuery, [tenantId]);
 
+      // Estructurar el resumen
+      const summary = {
+        total_ventas_24h: totalResult.rows[0].total_ventas_24h || 0,
+        detalle_por_empleado: {}
+      };
+
+      result.rows.forEach(row => {
+        if (!summary.detalle_por_empleado[row.empleado]) {
+          summary.detalle_por_empleado[row.empleado] = {
+            productos: [],
+            total_empleado: 0
+          };
+        }
+        summary.detalle_por_empleado[row.empleado].productos.push({
+          producto: row.product_name,
+          cantidad: parseInt(row.total_cantidad),
+          monto: parseFloat(row.total_monto)
+        });
+        summary.detalle_por_empleado[row.empleado].total_empleado += parseFloat(row.total_monto);
+      });
+
       return { 
         status: 'success', 
-        summary: {
-          total_ventas_24h: totalResult.rows[0].total_ventas_24h || 0,
-          vendedores: result.rows
-        }
+        summary
       };
     },
   };
