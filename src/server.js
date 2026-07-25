@@ -65,7 +65,7 @@ const sanitizeSensitiveData = (data) => {
   if (Array.isArray(data)) return data.map(sanitizeSensitiveData);
 
   const sanitized = { ...data };
-  const sensitiveCollections = ['users', 'clientes', 'clients', 'updatedData'];
+  const sensitiveCollections = ['clientes', 'clients', 'updatedData'];
 
   sensitiveCollections.forEach((key) => {
     if (key in sanitized) {
