@@ -808,7 +808,6 @@ class SystemDomain {
         SELECT 
           u.id as user_id, 
           u.username, 
-          u.email, 
           c.id as client_id, 
           c.nombre as client_name, 
           c.private_config,
