@@ -103,6 +103,15 @@ class SystemDomain {
       required: [],
       description: 'Generates a masive report of all clients and their subscription status.',
     },
+    'list-users-detailed': {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', default: 100 },
+        offset: { type: 'integer', default: 0 },
+      },
+      required: [],
+      description: 'Lists all users with their associated client and subscription plan details.',
+    },
     'events-clear': {
       type: 'object',
       properties: {
@@ -185,6 +194,15 @@ class SystemDomain {
       properties: {},
       required: [],
       description: 'Generates a masive report of all clients and their subscription status.',
+    },
+    'list-users-detailed': {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', default: 100 },
+        offset: { type: 'integer', default: 0 },
+      },
+      required: [],
+      description: 'Lists all users with their associated client and subscription plan details.',
     },
     'events-clear': {
       description: 'Deletes old events to maintain performance.',
@@ -777,6 +795,69 @@ class SystemDomain {
       } catch (mapError) {
         return { status: 'error', message: 'MAP_ERROR', detail: mapError.message };
       }
+    },
+
+    'list-users-detailed': async function (user, payload, txClient = null) {
+      if (user.role_name !== 'SUPER_ADMIN' && user.role_name !== 'ADMINISTRADOR') {
+        throw new EngineError('ACCESO_DENEGADO_ROL', 'Solo administradores.');
+      }
+      
+      const { limit = 100, offset = 0 } = payload;
+      
+      const query = `
+        SELECT 
+          u.id as user_id, 
+          u.username, 
+          u.email, 
+          c.id as client_id, 
+          c.nombre as client_name, 
+          c.private_config,
+          c.created_at as client_created_at
+        FROM usuarios u
+        JOIN clientes c ON u.cliente_id = c.id
+        ORDER BY u.id
+        LIMIT $1 OFFSET $2
+      `;
+
+      const result = await (txClient || db).query(query, [limit, offset]);
+      
+      const users = result.rows.map(userRow => {
+        const pc = userRow.private_config || {};
+        let daysRemaining = null;
+        if (pc && pc.plan === 'pro') {
+            const now = new Date();
+            let referenceDate;
+            if (pc.is_trial && pc.trial_end_date) {
+                referenceDate = new Date(pc.trial_end_date);
+                daysRemaining = Math.max(0, Math.floor((referenceDate - now) / (1000 * 60 * 60 * 24)));
+            } else if (pc.last_payment_date) {
+                referenceDate = new Date(pc.last_payment_date);
+                const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+                daysRemaining = Math.max(0, 30 - diffDays);
+            } else if (userRow.client_created_at) {
+                referenceDate = new Date(userRow.client_created_at);
+                const diffDays = Math.floor((now - referenceDate) / (1000 * 60 * 60 * 24));
+                daysRemaining = Math.max(0, 30 - diffDays);
+            }
+        }
+        return {
+          user_id: userRow.user_id,
+          username: userRow.username,
+          email: userRow.email,
+          client: {
+            id: userRow.client_id,
+            name: userRow.client_name,
+            subscription: {
+              plan: pc.plan || 'free',
+              is_trial: !!pc.is_trial,
+              days_remaining: daysRemaining,
+              created_at: userRow.client_created_at
+            }
+          }
+        };
+      });
+
+      return { status: 'success', users };
     },
 
     'events-clear': async function (user, payload, txClient = null) {
