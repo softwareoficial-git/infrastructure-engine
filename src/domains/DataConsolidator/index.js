@@ -40,7 +40,6 @@ class DataConsolidatorDomain {
       const consolidated = {};
 
       for (const item of rawItems) {
-        // Normalizar acceso a campos, soportando diferentes variantes
         const code = (item.code || item.codigo || item.product_id || '').toString().trim().toUpperCase();
         if (!code || code === 'OBJECT' || code === '[OBJECT OBJECT]') continue;
 
@@ -56,25 +55,37 @@ class DataConsolidatorDomain {
 
         consolidated[code].names.push((item.name || item.product_name || 'Sin nombre').toString().trim());
         consolidated[code].categories.push((item.category || item.cat || 'Sin categoría').toString().trim());
-
+        
         const price = parseFloat(item.price || item.precio || 0);
         if (!isNaN(price)) {
             consolidated[code].prices.push(price);
         }
         consolidated[code].count++;
       }
-      // ... resto del código ...
 
       const finalData = Object.values(consolidated).map((entry) => {
         return {
           code: entry.code,
           suggested_name: DataConsolidatorDomain.getMode(entry.names),
           suggested_category: DataConsolidatorDomain.getMode(entry.categories),
-          average_price:
-            entry.prices.reduce((a, b) => a + b, 0) / entry.prices.length,
+          average_price: entry.prices.reduce((a, b) => a + b, 0) / entry.prices.length,
           source_count: entry.count,
         };
       });
+
+      // Persistencia en master_products
+      for (const p of finalData) {
+        await db.query(`
+          INSERT INTO master_products (code, suggested_name, suggested_category, average_price, source_count)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (code) DO UPDATE SET
+            suggested_name = EXCLUDED.suggested_name,
+            suggested_category = EXCLUDED.suggested_category,
+            average_price = EXCLUDED.average_price,
+            source_count = EXCLUDED.source_count,
+            last_updated = CURRENT_TIMESTAMP
+        `, [p.code, p.suggested_name, p.suggested_category, p.average_price, p.source_count]);
+      }
 
       return { status: 'success', data: finalData };
     },
