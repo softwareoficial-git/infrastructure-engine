@@ -974,17 +974,7 @@ class SystemDomain {
       if (currentVersion < 3 && targetVersion >= 3) {
         console.log('Applying Migration v3: Creating system_events table...');
         await client.query(`
-          CREATE TABLE IF NOT EXISTS system_events (
-            id SERIAL PRIMARY KEY,
-            tenant_id INTEGER,
-            user_id INTEGER,
-            command VARCHAR(100),
-            status VARCHAR(20),
-            error_code VARCHAR(50),
-            source VARCHAR(50),
-            payload JSONB DEFAULT '{}',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-          );
+          CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
         `);
         await client.query(`
           CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id);
