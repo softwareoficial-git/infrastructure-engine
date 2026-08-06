@@ -265,8 +265,10 @@ class SystemDomain {
       await client.query('UPDATE clientes SET schema_version = 2');
     }
     if (currentVersion < 3 && targetVersion >= 3) {
-      console.log('Applying Migration v3: Creating system_events table...');
-      await client.query(`CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
+      console.log('Applying Migration v3: Ensuring system_events table structure...');
+      await client.query(`CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
+      // Asegurar columna ip_address si la tabla existía previamente sin ella
+      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45);');
       await client.query('CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id); CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id); CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at); CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);');
       await client.query('UPDATE clientes SET schema_version = 3');
     }
