@@ -224,10 +224,31 @@ class SystemDomain {
   };
 
   static async _runMigrations(client, targetVersion) {
-    const versionCheck = await client.query('SELECT schema_version FROM clientes LIMIT 1');
-    const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
+    // 1. Asegurar existencia de tabla clientes base
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS clientes (
+            id SERIAL PRIMARY KEY, 
+            nombre VARCHAR(255) NOT NULL, 
+            public_config JSONB DEFAULT '{}', 
+            private_config JSONB DEFAULT '{}', 
+            schema_version INTEGER DEFAULT 1, 
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
 
-    console.log(`Migrating schema from v${currentVersion} to v${targetVersion}...`);
+    // 2. Obtener versión actual o inicializar en 1 si está vacía
+    const versionCheck = await client.query('SELECT schema_version FROM clientes LIMIT 1');
+    let currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
+    
+    // Si la tabla existía pero estaba vacía de datos, forzamos v1
+    if (versionCheck.rows.length === 0) {
+        console.log('Tabla clientes creada/vacía, inicializando en versión 1.');
+        currentVersion = 1;
+    }
+
+    console.log(`Migrando schema de v${currentVersion} a v${targetVersion}...`);
+
+    // ... (rest of the migration logic remains same)
 
     if (currentVersion < 2 && targetVersion >= 2) {
       console.log('Applying Migration v2: Ensuring official template exists...');
