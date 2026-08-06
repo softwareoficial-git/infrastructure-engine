@@ -233,6 +233,7 @@ class SystemDomain {
         CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255), cliente_id INTEGER, permisos JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS sesiones (id SERIAL PRIMARY KEY, usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE, token VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value JSONB NOT NULL);
+        CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
     `);
 
     // 2. Obtener versión actual
@@ -266,9 +267,12 @@ class SystemDomain {
     }
     if (currentVersion < 3 && targetVersion >= 3) {
       console.log('Applying Migration v3: Ensuring system_events table structure...');
-      await client.query(`CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
-      // Asegurar columna ip_address si la tabla existía previamente sin ella
+      await client.query(`CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
+      // Asegurar columnas si la tabla existía previamente sin ellas
       await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45);');
+      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS user_agent TEXT;');
+      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS app_id VARCHAR(100);');
+      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS request_id VARCHAR(100);');
       await client.query('CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id); CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id); CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at); CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);');
       await client.query('UPDATE clientes SET schema_version = 3');
     }
