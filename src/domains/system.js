@@ -224,29 +224,32 @@ class SystemDomain {
   };
 
   static async _runMigrations(client, targetVersion) {
-    // 1. Asegurar existencia de tabla clientes base
+    // 1. Asegurar existencia de todas las tablas base de forma atómica
+    console.log('Verificando/Creando estructura base de datos...');
     await client.query(`
-        CREATE TABLE IF NOT EXISTS clientes (
-            id SERIAL PRIMARY KEY, 
-            nombre VARCHAR(255) NOT NULL, 
-            public_config JSONB DEFAULT '{}', 
-            private_config JSONB DEFAULT '{}', 
-            schema_version INTEGER DEFAULT 1, 
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
+        CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT '{}', private_config JSONB DEFAULT '{}', schema_version INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT '{}', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS roles (id SERIAL PRIMARY KEY, nombre VARCHAR(50) UNIQUE NOT NULL, parent_id INTEGER REFERENCES roles(id));
+        CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255), cliente_id INTEGER, permisos JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sesiones (id SERIAL PRIMARY KEY, usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE, token VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value JSONB NOT NULL);
     `);
 
-    // 2. Obtener versión actual o inicializar en 1 si está vacía
+    // 2. Obtener versión actual
     const versionCheck = await client.query('SELECT schema_version FROM clientes LIMIT 1');
     let currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
     
     // Si la tabla existía pero estaba vacía de datos, forzamos v1
     if (versionCheck.rows.length === 0) {
-        console.log('Tabla clientes creada/vacía, inicializando en versión 1.');
+        console.log('Inicializando estructura de datos base...');
+        // Insertamos un registro de cliente inicial si no hay ninguno para marcar versión
+        await client.query("INSERT INTO clientes (nombre, schema_version) VALUES ('Default Tenant', 1)");
         currentVersion = 1;
     }
 
     console.log(`Migrando schema de v${currentVersion} a v${targetVersion}...`);
+
+    // ... (rest of the migration logic)
 
     // ... (rest of the migration logic remains same)
 
