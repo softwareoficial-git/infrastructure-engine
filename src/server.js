@@ -9,6 +9,12 @@ const { sanitizeObject } = require('./utils/security');
 require('./domains/system');
 require('./domains/app');
 require('./domains/user');
+require('./domains/system_config');
+require('./domains/client');
+require('./domains/monitor');
+require('./domains/analytics');
+require('./domains/DataConsolidator');
+require('./domains/sales');
 
 const app = express();
 
