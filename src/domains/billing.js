@@ -82,18 +82,25 @@ class BillingDomain {
         // 1. Recuperar credenciales para validar firma
         const configResult = await dbClient.query(
             'SELECT config_data FROM PaymentConfigs WHERE tenant_id = $1 AND gateway_type = $2',
-            [tenant_id, 'mercadopago'] // Asumimos MP por ahora
+            [tenant_id, 'mercadopago']
         );
         
         if (configResult.rows.length === 0) throw new Error('Configuración no encontrada');
-        const config = configResult.rows[0].config_data;
         
-        // 2. Aquí iría la lógica de validación de firma con config.webhook_secret
-        // Por ahora registramos el evento y lo procesamos.
+        // 2. Aquí iría la lógica real de validación de firma
         console.log(`[WEBHOOK] Recibido para tenant ${tenant_id}`, body);
         
-        // 3. Disparar evento de notificación (puedes usar un emisor de eventos interno aquí)
-        // Ejemplo: motor.emit('BILLING:payment-received', { tenant_id, body });
+        // 3. Puente hacia Business Logic V2
+        const backendUrl = process.env.BUSINESS_LOGIC_URL || 'http://localhost:3001';
+        try {
+            await require('axios').post(`${backendUrl}/api/billing/webhook-bridge`, {
+                tenant_id,
+                body
+            });
+            console.log(`[WEBHOOK] Reenviado a Business Logic V2 exitosamente.`);
+        } catch (error) {
+            console.error(`[WEBHOOK] Error al reenviar a Business Logic V2:`, error.message);
+        }
         
         return { status: 'processed' };
     }
