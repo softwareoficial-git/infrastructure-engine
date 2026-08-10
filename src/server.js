@@ -409,12 +409,13 @@ async function startServer() {
     }
 
     // 3. Automatic Migration Check
-    const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
-    const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 12; // Versión de producción con tabla PaymentConfigs
+    const TARGET_VERSION = 12; // Versión definitiva: Reset total a v12
 
-    if (currentVersion < TARGET_VERSION) {
-      console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);
+    // Forzamos la migración siempre si la versión no es 12
+    const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 0;
+
+    if (currentVersion !== TARGET_VERSION) {
+      console.log(`🚀 Forzando reseteo y migración a v${TARGET_VERSION}...`);
       const bootstrapUser = {
         id: 0,
         role_name: 'ADMINISTRADOR',
@@ -425,9 +426,9 @@ async function startServer() {
       await motor.execute(bootstrapUser, 'SYSTEM:migrate-schema', {
         targetVersion: TARGET_VERSION,
       });
-      console.log(`✅ Migration to ${TARGET_VERSION} completed.`);
+      console.log(`✅ Inicialización en v${TARGET_VERSION} completada.`);
     } else {
-      console.log(`ℹ️  Database is up to date (v${currentVersion}).`);
+      console.log(`ℹ️  Base de datos al día (v${currentVersion}).`);
     }
 
     app.listen(PORT, () => {
