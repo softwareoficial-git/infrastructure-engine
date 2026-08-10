@@ -34,6 +34,7 @@ const ROLE_PERMISSIONS = {
     'MONITOR:get-my-version',
     'MONITOR:get-system-health',
   ],
+  GATEWAY: ['BILLING:*'],
 };
 
 /**
