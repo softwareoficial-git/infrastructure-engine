@@ -721,6 +721,20 @@ class SystemDomain {
       return { status: 'success', message: 'Usuario eliminado correctamente.' };
     },
 
+    'create-admin': async function (user, payload, txClient = null) {
+      if (user.role_name !== 'SUPER_ADMIN') {
+        throw new EngineError('ACCESO_DENEGADO_ROL', 'Solo los SUPER_ADMIN pueden crear administradores.');
+      }
+      const { hashPassword } = require('../utils/security');
+      const { username, password } = payload;
+      const passwordHash = await hashPassword(password);
+      await (txClient || db).query(
+        'INSERT INTO usuarios (username, password, role_id) VALUES ($1, $2, (SELECT id FROM roles WHERE nombre = \'SUPER_ADMIN\'))',
+        [username, passwordHash]
+      );
+      return { status: 'success', message: 'Administrador creado correctamente.' };
+    },
+
     'clients-status-report': async function (user, payload, txClient = null) {
       if (user.role_name !== 'SUPER_ADMIN' && user.role_name !== 'ADMINISTRADOR') {
         return { status: 'error', message: 'Solo administradores.' };
