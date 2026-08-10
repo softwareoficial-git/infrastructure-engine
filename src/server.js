@@ -15,6 +15,7 @@ require('./domains/monitor');
 require('./domains/analytics');
 require('./domains/DataConsolidator');
 require('./domains/sales');
+require('./domains/billing');
 
 const app = express();
 
@@ -393,7 +394,7 @@ async function startServer() {
     // 3. Automatic Migration Check
     const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    const TARGET_VERSION = 11; // Versión de producción con tickets de venta
+    const TARGET_VERSION = 12; // Versión de producción con tabla PaymentConfigs
 
     if (currentVersion < TARGET_VERSION) {
       console.log(`🚀 Migrating database from v${currentVersion} to v${TARGET_VERSION}...`);

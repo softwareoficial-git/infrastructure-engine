@@ -19,6 +19,7 @@ const ROLE_PERMISSIONS = {
     'MONITOR:get-system-health',
     'ANALYTICS:list-visits',
     'SALES:*',
+    'BILLING:*',
   ],
   EMPLEADO: [
     'USER:get-profile',
