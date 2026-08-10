@@ -97,6 +97,14 @@ class SystemDomain {
       },
       required: ['userId'],
     },
+    'create-admin': {
+      type: 'object',
+      properties: {
+        username: { type: 'string', minLength: 1 },
+        password: { type: 'string', minLength: 6 },
+      },
+      required: ['username', 'password'],
+    },
     'clients-status-report': {
       type: 'object',
       properties: {},
@@ -228,6 +236,7 @@ class SystemDomain {
         console.log('⚠️ Ejecutando reset destructivo y migración base a v12...');
         try {
             await client.query('BEGIN');
+            
             // Eliminar todo
             await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO postgres; GRANT ALL ON SCHEMA public TO public;');
             
@@ -255,8 +264,9 @@ class SystemDomain {
                 );
                 CREATE UNIQUE INDEX idx_payment_configs_tenant_gateway ON PaymentConfigs(tenant_id, gateway_type);
 
-                -- Insertar Tenant por defecto
+                -- Insertar datos base
                 INSERT INTO clientes (nombre, schema_version) VALUES ('Default Tenant', 12);
+                INSERT INTO roles (nombre) VALUES ('SUPER_ADMIN'), ('ADMINISTRADOR'), ('DUEÑO'), ('EMPLEADO');
             `);
             
             await client.query('COMMIT');
