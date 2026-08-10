@@ -23,13 +23,17 @@ class BillingDomain {
         gateway_type: { type: 'string' }
       },
       required: ['tenant_id']
+    },
+    'list-gateways': {
+      type: 'object',
+      properties: {},
+      required: []
     }
   };
 
   static commands = {
     'config': async (user, payload, client = null) => {
       const dbClient = client || db;
-      // Autorización básica: Solo DUEÑO de su propio tenant o SUPER_ADMIN
       if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== payload.tenant_id) {
         throw new Error('No autorizado');
       }
@@ -77,11 +81,14 @@ class BillingDomain {
       return result.rows;
     },
 
+    'list-gateways': async (user, payload, client = null) => {
+      return ['mercadopago', 'crypto_eth', 'crypto_btc'];
+    },
+
     'webhook-event': async (user, payload, client = null) => {
         const dbClient = client || db;
         const { tenant_id, body, headers } = payload;
         
-        // 1. Recuperar credenciales para validar firma
         const configResult = await dbClient.query(
             'SELECT config_data FROM PaymentConfigs WHERE tenant_id = $1 AND gateway_type = $2',
             [tenant_id, 'mercadopago']
@@ -89,10 +96,8 @@ class BillingDomain {
         
         if (configResult.rows.length === 0) throw new Error('Configuración no encontrada');
         
-        // 2. Aquí iría la lógica real de validación de firma
         console.log(`[WEBHOOK] Recibido para tenant ${tenant_id}`, body);
         
-        // 3. Puente hacia Business Logic V2
         const backendUrl = process.env.BUSINESS_LOGIC_URL || 'http://localhost:3001';
         try {
             await require('axios').post(`${backendUrl}/api/billing/webhook-bridge`, {
