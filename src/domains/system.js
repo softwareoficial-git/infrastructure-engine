@@ -324,22 +324,30 @@ class SystemDomain {
         console.log('✅ Migration v11 completed.');
     }
     if (currentVersion < 12 && targetVersion >= 12) {
-        console.log('Applying Migration v12: Creating PaymentConfigs table...');
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS PaymentConfigs (
-            id SERIAL PRIMARY KEY,
-            tenant_id INTEGER NOT NULL,
-            gateway_type VARCHAR(50) NOT NULL,
-            config_data JSONB NOT NULL DEFAULT '{}',
-            is_active BOOLEAN NOT NULL DEFAULT true,
-            environment VARCHAR(20) NOT NULL DEFAULT 'production',
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-          );
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_configs_tenant_gateway 
-          ON PaymentConfigs(tenant_id, gateway_type);
-        `);
-        await client.query('UPDATE clientes SET schema_version = 12');
-        console.log('✅ Migration v12 completed.');
+        try {
+            await client.query('BEGIN');
+            console.log('Applying Migration v12: Creating PaymentConfigs table...');
+            await client.query(`
+              CREATE TABLE IF NOT EXISTS PaymentConfigs (
+                id SERIAL PRIMARY KEY,
+                tenant_id INTEGER NOT NULL,
+                gateway_type VARCHAR(50) NOT NULL,
+                config_data JSONB NOT NULL DEFAULT '{}',
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                environment VARCHAR(20) NOT NULL DEFAULT 'production',
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+              );
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_configs_tenant_gateway 
+              ON PaymentConfigs(tenant_id, gateway_type);
+            `);
+            await client.query('UPDATE clientes SET schema_version = 12');
+            await client.query('COMMIT');
+            console.log('✅ Migration v12 completed.');
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('❌ Migration v12 failed, rolling back:', error);
+            throw error; // Propagar error para detener el inicio del servidor
+        }
     }
     return { from: currentVersion, to: targetVersion };
   }
