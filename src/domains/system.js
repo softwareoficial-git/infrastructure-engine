@@ -224,132 +224,47 @@ class SystemDomain {
   };
 
   static async _runMigrations(client, targetVersion) {
-    // 1. Asegurar existencia de todas las tablas base de forma atómica
-    console.log('Verificando/Creando estructura base de datos...');
-    await client.query(`
-        CREATE TABLE IF NOT EXISTS clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT '{}', private_config JSONB DEFAULT '{}', schema_version INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT '{}', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS roles (id SERIAL PRIMARY KEY, nombre VARCHAR(50) UNIQUE NOT NULL, parent_id INTEGER REFERENCES roles(id));
-        CREATE TABLE IF NOT EXISTS usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255), cliente_id INTEGER, permisos JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS sesiones (id SERIAL PRIMARY KEY, usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE, token VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS system_settings (key VARCHAR(100) PRIMARY KEY, value JSONB NOT NULL);
-        CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
-    `);
-
-    // 2. Obtener versión actual
-    const versionCheck = await client.query('SELECT schema_version FROM clientes LIMIT 1');
-    let currentVersion = versionCheck.rows.length > 0 ? versionCheck.rows[0].schema_version : 1;
-    
-    // Si la tabla existía pero estaba vacía de datos, forzamos v1
-    if (versionCheck.rows.length === 0) {
-        console.log('Inicializando estructura de datos base...');
-        // Insertamos un registro de cliente inicial si no hay ninguno para marcar versión
-        await client.query("INSERT INTO clientes (nombre, schema_version) VALUES ('Default Tenant', 1)");
-        currentVersion = 1;
-    }
-
-    console.log(`Migrando schema de v${currentVersion} a v${targetVersion}...`);
-
-    // ... (rest of the migration logic)
-
-    // ... (rest of the migration logic remains same)
-
-    if (currentVersion < 2 && targetVersion >= 2) {
-      console.log('Applying Migration v2: Ensuring official template exists...');
-      const existing = await client.query('SELECT id FROM plantillas WHERE es_oficial = true LIMIT 1');
-      if (existing.rows.length === 0) {
-        await client.query(
-          `INSERT INTO plantillas (nombre, contenido, es_oficial) VALUES ($1, $2, true)`,
-          ['Official Default Template', JSON.stringify({ stock: [], precios: {}, categorias: [] })]
-        );
-      }
-      await client.query('UPDATE clientes SET schema_version = 2');
-    }
-    if (currentVersion < 3 && targetVersion >= 3) {
-      console.log('Applying Migration v3: Ensuring system_events table structure...');
-      await client.query(`CREATE TABLE IF NOT EXISTS system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);`);
-      // Asegurar columnas si la tabla existía previamente sin ellas
-      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45);');
-      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS user_agent TEXT;');
-      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS app_id VARCHAR(100);');
-      await client.query('ALTER TABLE system_events ADD COLUMN IF NOT EXISTS request_id VARCHAR(100);');
-      await client.query('CREATE INDEX IF NOT EXISTS idx_events_tenant ON system_events(tenant_id); CREATE INDEX IF NOT EXISTS idx_events_user ON system_events(user_id); CREATE INDEX IF NOT EXISTS idx_events_created ON system_events(created_at); CREATE INDEX IF NOT EXISTS idx_events_command ON system_events(command);');
-      await client.query('UPDATE clientes SET schema_version = 3');
-    }
-    if (currentVersion < 5 && targetVersion >= 5) {
-        await client.query(`UPDATE clientes SET public_config = '{}' WHERE public_config IS NULL; ALTER TABLE clientes ALTER COLUMN public_config SET DEFAULT '{}'::jsonb; ALTER TABLE clientes ALTER COLUMN public_config SET NOT NULL;`);
-        await client.query('UPDATE clientes SET schema_version = 5');
-    }
-    if (currentVersion < 6 && targetVersion >= 6) {
-        await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto";');
-        await client.query(`CREATE TABLE IF NOT EXISTS logs_trafico (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id INTEGER NOT NULL, visit_type VARCHAR(50), url TEXT, referrer TEXT, user_agent TEXT, language VARCHAR(10), request_id VARCHAR(100), ip_address VARCHAR(45), timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255), browser VARCHAR(50), os VARCHAR(50), device_type VARCHAR(50));`);
-        await client.query(`CREATE TABLE IF NOT EXISTS geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));`);
-        await client.query('UPDATE clientes SET schema_version = 6');
-    }
-    if (currentVersion < 7 && targetVersion >= 7) {
-        await client.query('INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', ['ADMINISTRADOR']);
-        await client.query('INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', ['DUEÑO']);
-        await client.query('INSERT INTO roles (nombre) VALUES ($1) ON CONFLICT (nombre) DO NOTHING', ['EMPLEADO']);
-        await client.query("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS permisos JSONB DEFAULT '[]'");
-        await client.query('UPDATE clientes SET schema_version = 7');
-    }
-    if (currentVersion < 9 && targetVersion >= 9) {
-        await client.query(`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
-        await client.query('UPDATE clientes SET schema_version = 9');
-    }
-    if (currentVersion < 10 && targetVersion >= 10) {
-        console.log('Applying Migration v10: Creating sales_history table...');
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS sales_history (
-            id SERIAL PRIMARY KEY,
-            tenant_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            product_name TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            total_amount NUMERIC(10, 2) NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-          );
-          CREATE INDEX IF NOT EXISTS idx_sales_tenant_created ON sales_history(tenant_id, created_at);
-        `);
-        await client.query('UPDATE clientes SET schema_version = 10');
-        console.log('✅ Migration v10 completed.');
-    }
-    if (currentVersion < 11 && targetVersion >= 11) {
-        console.log('Applying Migration v11: Adding ticket_id to sales_history...');
-        await client.query(`
-          ALTER TABLE sales_history ADD COLUMN IF NOT EXISTS ticket_id UUID;
-          CREATE INDEX IF NOT EXISTS idx_sales_ticket ON sales_history(ticket_id);
-        `);
-        await client.query('UPDATE clientes SET schema_version = 11');
-        console.log('✅ Migration v11 completed.');
-    }
-    if (currentVersion < 12 && targetVersion >= 12) {
+    if (targetVersion === 12) {
+        console.log('⚠️ Ejecutando reset destructivo a v12...');
         try {
             await client.query('BEGIN');
-            console.log('Applying Migration v12: Creating PaymentConfigs table...');
+            // Eliminar todo
+            await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO postgres; GRANT ALL ON SCHEMA public TO public;');
+            
+            // Recrear estructura base + PaymentConfigs
             await client.query(`
-              CREATE TABLE IF NOT EXISTS PaymentConfigs (
-                id SERIAL PRIMARY KEY,
-                tenant_id INTEGER NOT NULL,
-                gateway_type VARCHAR(50) NOT NULL,
-                config_data JSONB NOT NULL DEFAULT '{}',
-                is_active BOOLEAN NOT NULL DEFAULT true,
-                environment VARCHAR(20) NOT NULL DEFAULT 'production',
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-              );
-              CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_configs_tenant_gateway 
-              ON PaymentConfigs(tenant_id, gateway_type);
+                CREATE TABLE clientes (id SERIAL PRIMARY KEY, nombre VARCHAR(255) NOT NULL, public_config JSONB DEFAULT '{}', private_config JSONB DEFAULT '{}', schema_version INTEGER DEFAULT 12, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE plantillas (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL, contenido JSONB DEFAULT '{}', version INTEGER DEFAULT 1, es_oficial BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE roles (id SERIAL PRIMARY KEY, nombre VARCHAR(50) UNIQUE NOT NULL, parent_id INTEGER REFERENCES roles(id));
+                CREATE TABLE usuarios (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password TEXT NOT NULL, role_id INTEGER REFERENCES roles(id), token VARCHAR(255), cliente_id INTEGER, permisos JSONB DEFAULT '[]', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE sesiones (id SERIAL PRIMARY KEY, usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE, token VARCHAR(255) UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE system_settings (key VARCHAR(100) PRIMARY KEY, value JSONB NOT NULL);
+                CREATE TABLE system_events (id SERIAL PRIMARY KEY, tenant_id INTEGER, user_id INTEGER, command VARCHAR(100), status VARCHAR(20), error_code VARCHAR(50), source VARCHAR(50), ip_address VARCHAR(45), user_agent TEXT, app_id VARCHAR(100), request_id VARCHAR(100), payload JSONB DEFAULT '{}', created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE logs_trafico (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id INTEGER NOT NULL, visit_type VARCHAR(50), url TEXT, referrer TEXT, user_agent TEXT, language VARCHAR(10), request_id VARCHAR(100), ip_address VARCHAR(45), timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255), browser VARCHAR(50), os VARCHAR(50), device_type VARCHAR(50));
+                CREATE TABLE geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));
+                CREATE TABLE sales_history (id SERIAL PRIMARY KEY, tenant_id INTEGER NOT NULL, user_id INTEGER NOT NULL, product_name TEXT NOT NULL, quantity INTEGER NOT NULL, total_amount NUMERIC(10, 2) NOT NULL, ticket_id UUID, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+                
+                CREATE TABLE PaymentConfigs (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL,
+                    gateway_type VARCHAR(50) NOT NULL,
+                    config_data JSONB NOT NULL DEFAULT '{}',
+                    is_active BOOLEAN NOT NULL DEFAULT true,
+                    environment VARCHAR(20) NOT NULL DEFAULT 'production',
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE UNIQUE INDEX idx_payment_configs_tenant_gateway ON PaymentConfigs(tenant_id, gateway_type);
             `);
-            await client.query('UPDATE clientes SET schema_version = 12');
+            
             await client.query('COMMIT');
-            console.log('✅ Migration v12 completed.');
+            console.log('✅ Base de datos reseteada y migrada a v12.');
         } catch (error) {
             await client.query('ROLLBACK');
-            console.error('❌ Migration v12 failed, rolling back:', error);
-            throw error; // Propagar error para detener el inicio del servidor
+            console.error('❌ Reset destructivo fallido:', error);
+            throw error;
         }
     }
-    return { from: currentVersion, to: targetVersion };
+    return { from: 0, to: 12 };
   }
 
   static commands = {
