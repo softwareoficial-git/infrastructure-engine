@@ -393,9 +393,9 @@ class SystemDomain {
       
       // Automatización: Ejecutar migraciones automáticamente
       // Nota: Aquí definimos la última versión deseada.
-      // Actualmente la última migración implementada es la v11.
+      // Actualmente la última migración implementada es la v12.
       try {
-        await SystemDomain._runMigrations(client, 11);
+        await SystemDomain._runMigrations(client, 12);
         console.log('✅ Migraciones automáticas completadas.');
       } catch (err) {
         console.error('❌ Error en migraciones automáticas:', err);
