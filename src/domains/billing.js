@@ -75,11 +75,12 @@ class BillingDomain {
       return result.rows;
     },
 
-    'webhook-event': async (user, payload, client = db) => {
+    'webhook-event': async (user, payload, client = null) => {
+        const dbClient = client || db;
         const { tenant_id, body, headers } = payload;
         
         // 1. Recuperar credenciales para validar firma
-        const configResult = await client.query(
+        const configResult = await dbClient.query(
             'SELECT config_data FROM PaymentConfigs WHERE tenant_id = $1 AND gateway_type = $2',
             [tenant_id, 'mercadopago'] // Asumimos MP por ahora
         );
