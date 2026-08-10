@@ -1,4 +1,5 @@
 const db = require('../core/db');
+const motor = require('../core/motor');
 
 class BillingDomain {
   static domain = 'BILLING';
@@ -76,4 +77,5 @@ class BillingDomain {
   };
 }
 
+motor.registerDomain(BillingDomain);
 module.exports = BillingDomain;
