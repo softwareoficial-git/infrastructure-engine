@@ -21,6 +21,23 @@ const app = express();
 
 app.use(express.json());
 
+// --- PUBLIC WEBHOOK ENDPOINT ---
+app.post('/api/billing/webhook/:tenantId', async (req, res) => {
+  const { tenantId } = req.params;
+  const gatewayUser = { id: 0, role_name: 'GATEWAY' };
+  try {
+    await motor.execute(gatewayUser, 'BILLING:webhook-event', {
+      tenant_id: parseInt(tenantId),
+      body: req.body,
+      headers: req.headers
+    });
+    return res.status(200).send('OK');
+  } catch (error) {
+    console.error(`[BILLING_WEBHOOK_ERROR] Tenant: ${tenantId}`, error);
+    return res.status(400).send('Invalid Webhook');
+  }
+});
+
 // --- GLOBAL SANITIZATION MIDDLEWARE ---
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && req.body) {

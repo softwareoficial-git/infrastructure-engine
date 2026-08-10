@@ -73,6 +73,28 @@ class BillingDomain {
 
       const result = await client.query(query, params);
       return result.rows;
+    },
+
+    'webhook-event': async (user, payload, client = db) => {
+        const { tenant_id, body, headers } = payload;
+        
+        // 1. Recuperar credenciales para validar firma
+        const configResult = await client.query(
+            'SELECT config_data FROM PaymentConfigs WHERE tenant_id = $1 AND gateway_type = $2',
+            [tenant_id, 'mercadopago'] // Asumimos MP por ahora
+        );
+        
+        if (configResult.rows.length === 0) throw new Error('Configuración no encontrada');
+        const config = configResult.rows[0].config_data;
+        
+        // 2. Aquí iría la lógica de validación de firma con config.webhook_secret
+        // Por ahora registramos el evento y lo procesamos.
+        console.log(`[WEBHOOK] Recibido para tenant ${tenant_id}`, body);
+        
+        // 3. Disparar evento de notificación (puedes usar un emisor de eventos interno aquí)
+        // Ejemplo: motor.emit('BILLING:payment-received', { tenant_id, body });
+        
+        return { status: 'processed' };
     }
   };
 }
