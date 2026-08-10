@@ -27,7 +27,8 @@ class BillingDomain {
   };
 
   static commands = {
-    'config': async (user, payload, client = db) => {
+    'config': async (user, payload, client = null) => {
+      const dbClient = client || db;
       // Autorización básica: Solo DUEÑO de su propio tenant o SUPER_ADMIN
       if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== payload.tenant_id) {
         throw new Error('No autorizado');
@@ -47,7 +48,7 @@ class BillingDomain {
         RETURNING *;
       `;
       
-      const result = await client.query(query, [
+      const result = await dbClient.query(query, [
         tenant_id, 
         gateway_type, 
         JSON.stringify(config_data), 
@@ -58,7 +59,8 @@ class BillingDomain {
       return result.rows[0];
     },
 
-    'get-config': async (user, payload, client = db) => {
+    'get-config': async (user, payload, client = null) => {
+      const dbClient = client || db;
       if (user.role_name !== 'SUPER_ADMIN' && user.cliente_id !== payload.tenant_id) {
         throw new Error('No autorizado');
       }
@@ -71,7 +73,7 @@ class BillingDomain {
         params.push(payload.gateway_type);
       }
 
-      const result = await client.query(query, params);
+      const result = await dbClient.query(query, params);
       return result.rows;
     },
 
