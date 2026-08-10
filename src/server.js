@@ -409,6 +409,7 @@ async function startServer() {
     }
 
     // 3. Automatic Migration Check
+    const versionCheck = await db.query('SELECT schema_version FROM clientes LIMIT 1');
     const TARGET_VERSION = 12; // Versión definitiva: Reset total a v12
 
     // Forzamos la migración siempre si la versión no es 12
