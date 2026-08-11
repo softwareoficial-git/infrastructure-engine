@@ -15,6 +15,7 @@ require('./domains/monitor');
 require('./domains/analytics');
 require('./domains/DataConsolidator');
 require('./domains/sales');
+require('./domains/caja');
 require('./domains/billing');
 
 const app = express();

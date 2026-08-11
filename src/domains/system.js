@@ -376,6 +376,27 @@ class SystemDomain {
             sql: 'CREATE TABLE IF NOT EXISTS geoip_data (id SERIAL PRIMARY KEY, ip_start INET NOT NULL, ip_end INET NOT NULL, country VARCHAR(100), city VARCHAR(100), isp VARCHAR(255));',
           },
           {
+            name: 'Tabla de Caja',
+            sql: `CREATE TABLE IF NOT EXISTS caja_turnos (
+                    id SERIAL PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    monto_inicial NUMERIC(10, 2) DEFAULT 0,
+                    estado VARCHAR(20) DEFAULT 'ABIERTO',
+                    fecha_apertura TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    fecha_cierre TIMESTAMP WITH TIME ZONE
+                  );
+                  CREATE TABLE IF NOT EXISTS caja_movimientos (
+                    id SERIAL PRIMARY KEY,
+                    turno_id INTEGER REFERENCES caja_turnos(id),
+                    user_id INTEGER NOT NULL,
+                    tipo VARCHAR(20) NOT NULL,
+                    monto NUMERIC(10, 2) NOT NULL,
+                    descripcion TEXT,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                  );`,
+          },
+          {
             name: 'Tabla de Historial de Ventas',
             sql: `CREATE TABLE IF NOT EXISTS sales_history (
                     id SERIAL PRIMARY KEY,
