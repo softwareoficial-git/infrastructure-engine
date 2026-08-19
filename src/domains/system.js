@@ -1088,6 +1088,17 @@ class SystemDomain {
         console.log('✅ Migration v9 completed.');
       }
 
+      if (currentVersion < 13 && targetVersion >= 13) {
+        console.log('Applying Migration v13: Initializing compatibility structure...');
+        await client.query(`
+          UPDATE clientes 
+          SET public_config = public_config || '{"compat": {"product_to_models": {}, "model_to_products": {}}}'::jsonb
+          WHERE NOT (public_config ? 'compat');
+        `);
+        await client.query('UPDATE clientes SET schema_version = 13');
+        console.log('✅ Migration v13 completed.');
+      }
+
       return {
         status: 'success',
         from: currentVersion,
