@@ -463,7 +463,7 @@ class SystemDomain {
                    VALUES ($1, $2, true)`,
                   [
                     'Official Default Template',
-                    JSON.stringify({ stock: [], precios: {}, categorias: [] }),
+                    JSON.stringify({ stock: {}, precios: {}, categorias: [] }),
                   ]
                 );
               }

@@ -38,7 +38,7 @@ class DataImportDomain {
       ]);
       if (clientRes.rows.length === 0) throw new EngineError('CLIENT_NOT_FOUND', { id: clienteId });
 
-      let publicConfig = clientRes.rows[0].public_config || { stock: [] };
+      let publicConfig = clientRes.rows[0].public_config || { stock: {} };
 
       // 2. Map and Import
       const importedItems = data.map((item) => {

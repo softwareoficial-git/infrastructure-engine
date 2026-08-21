@@ -28,7 +28,7 @@ class AppDomain {
     // Fusionar contenido de la plantilla con la estructura de negocio inicial obligatoria
     const initialConfig = {
       ...officialContent,
-      stock: [],
+      stock: {},
       sales: [],
       employees: [],
     };
@@ -344,7 +344,7 @@ class AppDomain {
       const { clienteId } = payload;
 
       const initialStructure = {
-        stock: [],
+        stock: {},
         sales: [],
         employees: [],
       };
