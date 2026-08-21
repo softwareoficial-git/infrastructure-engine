@@ -1099,6 +1099,24 @@ class SystemDomain {
         console.log('✅ Migration v13 completed.');
       }
 
+      if (currentVersion < 14 && targetVersion >= 14) {
+        console.log('Applying Migration v14: Creating global cliente_data_sheets table...');
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS public.cliente_data_sheets (
+                id SERIAL PRIMARY KEY,
+                cliente_id INTEGER NOT NULL REFERENCES public.clientes(id) ON DELETE CASCADE,
+                namespace VARCHAR(100) NOT NULL,
+                data JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(cliente_id, namespace)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cliente_data_sheets_namespace ON public.cliente_data_sheets(namespace);
+        `);
+        await client.query('UPDATE clientes SET schema_version = 14');
+        console.log('✅ Migration v14 completed.');
+      }
+
       return {
         status: 'success',
         from: currentVersion,
