@@ -3,6 +3,19 @@ const db = require('../core/db');
 const { EngineError } = require('../core/errors');
 const { hashPassword } = require('../utils/security');
 
+// Función auxiliar para slugificar
+function slugify(text) {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')           // Reemplazar espacios por guiones
+    .replace(/[^\w-]+/g, '')       // Eliminar caracteres no-palabra (excepto guiones)
+    .replace(/--+/g, '-')           // Reemplazar múltiples guiones por uno solo
+    .replace(/^-+/, '')             // Eliminar guiones al inicio
+    .replace(/-+$/, '');            // Eliminar guiones al final
+}
+
 // --- SCHEMAS ---
 const BASE_CONFIG_SCHEMA = {
   type: 'object',
@@ -110,11 +123,11 @@ class AppDomain {
     'self-register': {
       type: 'object',
       properties: {
-        nombreCliente: { type: 'string', minLength: 1 },
-        username: { type: 'string', minLength: 3 },
+        nombreCliente: { type: 'string', minLength: 1 }, // Ahora es obligatorio y se slugifica
+        username: { type: 'string', minLength: 1 },
         password: { type: 'string', minLength: 6 },
       },
-      required: ['username', 'password'],
+      required: ['nombreCliente', 'username', 'password'],
     },
   };
 
@@ -380,8 +393,8 @@ class AppDomain {
         await client.query('BEGIN');
 
         // 2. Create Client
-        const finalNombreCliente = nombreCliente || `Cliente de ${username}`;
-        const newCliente = await AppDomain._createClient(client, finalNombreCliente);
+        const finalNombreSlug = slugify(nombreCliente || `cliente-de-${username}`);
+        const newCliente = await AppDomain._createClient(client, finalNombreSlug);
 
         // 3. Find the 'DUEÑO' role ID
         const roleRes = await client.query("SELECT id FROM roles WHERE nombre = 'DUEÑO'");
